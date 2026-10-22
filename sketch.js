@@ -3,7 +3,7 @@
 window.DC_SCRIPT_LOADED = true;
 
 const APP = {
-  version: '0.2.7',
+  version: '0.2.8',
   mode: 'HALO',
   params: { light: 70, atmosphere: 82, color: 90, sourceColor: 18 },
   recipe: null,
@@ -41,117 +41,181 @@ uniform float uSeed;
 uniform vec4 uH0;
 uniform vec4 uH1;
 uniform vec4 uH2;
-uniform vec4 uR0;
-uniform vec4 uR1;
-uniform vec4 uR2;
-uniform vec3 uC0;
-uniform vec3 uC1;
-uniform vec3 uC2;
-uniform vec3 uC3;
 
-float sat(float x){return clamp(x,0.0,1.0);}
+float sat(float x){return clamp(x,0.0,1.0);} 
 float lum(vec3 c){return dot(c,vec3(.2126,.7152,.0722));}
-vec2 mirrorUV(vec2 uv){vec2 q=mod(uv,2.0);return 1.0-abs(q-1.0);}
+vec2 mirrorUV(vec2 uv){vec2 q=mod(uv,2.0);return 1.0-abs(q-1.0);} 
 vec3 tex(vec2 uv){return texture2D(uTex,clamp(uv,0.0,1.0)).rgb;}
 vec3 texM(vec2 uv){return texture2D(uTex,mirrorUV(uv)).rgb;}
-float hash21(vec2 p){p=fract(p*vec2(123.34,345.45));p+=dot(p,p+34.345);return fract(p.x*p.y);}
-float noise2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);float a=hash21(i),b=hash21(i+vec2(1,0)),c=hash21(i+vec2(0,1)),d=hash21(i+vec2(1,1));return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}
-float fbm4(vec2 p){float v=0.0,a=.52;mat2 m=mat2(1.57,1.11,-1.11,1.57);for(int i=0;i<4;i++){v+=a*noise2(p);p=m*p+13.71;a*=.48;}return v;}
+float hash21(vec2 p){p=fract(p*vec2(123.34,345.45));p+=dot(p,p+34.345);return fract(p.x*p.y);} 
+float noise2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*f*(f*(f*6.0-15.0)+10.0);float a=hash21(i),b=hash21(i+vec2(1,0)),c=hash21(i+vec2(0,1)),d=hash21(i+vec2(1,1));return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);} 
+float fbm(vec2 p){float v=0.0,a=.5;mat2 m=mat2(1.53,1.17,-1.17,1.53);for(int i=0;i<6;i++){v+=a*noise2(p);p=m*p+17.13;a*=.5;}return v;}
 float ridge(float x){return 1.0-abs(2.0*x-1.0);}
-vec2 rot2(vec2 p,float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c)*p;}
-float blob(vec2 uv,vec2 c,vec2 size,float a){vec2 q=rot2(uv-c,a)/max(size,vec2(.001));return exp(-dot(q,q)*2.05);}
-float edge(vec2 uv,float px){vec2 dx=vec2(px,0),dy=vec2(0,px);float ex=abs(lum(texM(uv+dx))-lum(texM(uv-dx)));float ey=abs(lum(texM(uv+dy))-lum(texM(uv-dy)));return sat((ex+ey)*2.05);}
-float bright(vec2 uv,float t){float y=lum(texM(uv));return smoothstep(t-.06,t+.08,y)*sat((y-t+.09)/(1.08-t));}
+float edge(vec2 uv,float px){vec2 dx=vec2(px,0),dy=vec2(0,px);float ex=abs(lum(texM(uv+dx))-lum(texM(uv-dx)));float ey=abs(lum(texM(uv+dy))-lum(texM(uv-dy)));return sat((ex+ey)*2.15);} 
+float bright(vec2 uv,float t){float y=lum(texM(uv));return smoothstep(t-.055,t+.075,y)*sat((y-t+.08)/(1.08-t));}
 float ringBright(vec2 uv,float r,float t){vec2 px=vec2(1.0)/uResolution;vec2 x=vec2(r*px.x,0),y=vec2(0,r*px.y);float s=0.0;s+=bright(uv+x,t);s+=bright(uv-x,t);s+=bright(uv+y,t);s+=bright(uv-y,t);s+=bright(uv+x+y,t);s+=bright(uv+x-y,t);s+=bright(uv-x+y,t);s+=bright(uv-x-y,t);return s*.125;}
-vec3 screenBlend(vec3 a,vec3 b){return 1.0-(1.0-a)*(1.0-b);}
+vec3 screenBlend(vec3 a,vec3 b){return 1.0-(1.0-a)*(1.0-b);} 
 vec3 softLight(vec3 b,vec3 s){return mix(sqrt(max(b,0.0))*(2.0*s-1.0)+2.0*b*(1.0-s),b-(1.0-2.0*s)*b*(1.0-b),step(.5,s));}
-vec3 satAdjust(vec3 c,float a){float y=lum(c);return mix(vec3(y),c,a);}
-vec3 hueRotateYIQ(vec3 c,float a){float Y=dot(c,vec3(.299,.587,.114));float I=dot(c,vec3(.596,-.274,-.322));float Q=dot(c,vec3(.211,-.523,.312));float cs=cos(a),sn=sin(a);float I2=I*cs-Q*sn;float Q2=I*sn+Q*cs;return vec3(Y+.956*I2+.621*Q2,Y-.272*I2-.647*Q2,Y-1.106*I2+1.703*Q2);}
-vec3 sampleBlur9(vec2 uv,vec2 r){vec3 s=texM(uv)*.20;s+=texM(uv+r*vec2(1,0))*.10;s+=texM(uv+r*vec2(-1,0))*.10;s+=texM(uv+r*vec2(0,1))*.10;s+=texM(uv+r*vec2(0,-1))*.10;s+=texM(uv+r*vec2(.8,.8))*.10;s+=texM(uv+r*vec2(-.8,.8))*.10;s+=texM(uv+r*vec2(.8,-.8))*.10;s+=texM(uv+r*vec2(-.8,-.8))*.10;return s;}
-vec3 softShoulder(vec3 c){return c/(vec3(1.0)+max(c-vec3(.72),vec3(0.0))*.90);}
-float grain(vec2 uv){return hash21(floor(uv*uResolution)+uSeed*17.0)-.5;}
+vec2 rot2(vec2 p,float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c)*p;}
+float blob(vec2 uv,vec2 c,vec2 size,float a){vec2 q=rot2(uv-c,a)/max(size,vec2(.001));return exp(-dot(q,q)*2.15);} 
+vec3 paletteMap(vec3 base,vec3 lo,vec3 mid,vec3 hi,float amount){
+  float y=lum(base);
+  vec3 p=mix(lo,mid,smoothstep(.02,.58,y));
+  p=mix(p,hi,smoothstep(.42,.98,y));
+  vec3 mapped=p*mix(.40,1.32,y);
+  return mix(base,clamp(mapped,0.0,1.0),sat(amount));
+}
+vec3 hueRotateYIQ(vec3 c,float a){
+  float Y=dot(c,vec3(.299,.587,.114));
+  float I=dot(c,vec3(.596,-.274,-.322));
+  float Q=dot(c,vec3(.211,-.523,.312));
+  float cs=cos(a),sn=sin(a);
+  float I2=I*cs-Q*sn;
+  float Q2=I*sn+Q*cs;
+  return vec3(Y+.956*I2+.621*Q2,Y-.272*I2-.647*Q2,Y-1.106*I2+1.703*Q2);
+}
+vec3 satAdjust(vec3 c,float amount){float y=lum(c);return mix(vec3(y),c,amount);}
+vec3 filmResponse(vec3 base,float amount){
+  vec3 c=clamp(base,0.0,1.0);
+  float y=lum(c);
+  float sh=1.0-smoothstep(.10,.58,y);
+  float hi=smoothstep(.44,.96,y);
+  float mid=sat(1.0-sh-hi);
+  float wsum=max(sh+mid+hi,.001);
 
-vec3 spectralColor(float t){
-  t=fract(t);
-  vec3 rb=.56+.44*cos(6.2831853*(t+vec3(.00,.67,.33)));
-  vec3 p01=mix(uC0,uC1,smoothstep(.00,.48,t));
-  vec3 p23=mix(uC2,uC3,smoothstep(.52,1.00,t));
-  vec3 pal=mix(p01,p23,smoothstep(.28,.72,t));
-  float mixAmt=.24+.34*uColor;
-  return clamp(mix(pal,rb,mixAmt),0.0,1.18);
+  float aSh=(uH0.x-.5)*2.05;
+  float aMid=(uH1.y-.5)*2.55;
+  float aHi=(uH2.w-.5)*1.85;
+  vec3 shC=hueRotateYIQ(c,aSh);
+  vec3 midC=hueRotateYIQ(c,aMid);
+  vec3 hiC=hueRotateYIQ(c,aHi);
+  vec3 x=(shC*sh+midC*mid+hiC*hi)/wsum;
+
+  vec3 q;
+  q.r=x.r*(.72+.34*uH0.w)+x.g*(.04+.22*uH1.x)+x.b*(.02+.18*uH2.z);
+  q.g=x.g*(.72+.31*uH1.y)+x.b*(.04+.19*uH0.x)+x.r*(.02+.15*uH2.w);
+  q.b=x.b*(.72+.34*uH2.x)+x.r*(.04+.23*uH1.z)+x.g*(.02+.17*uH0.z);
+
+  float yq=max(lum(q),.001);
+  float targetY=mix(y,yq,.16+.16*uH1.w);
+  q*=targetY/yq;
+
+  vec3 shGain=mix(vec3(.72,.91,1.28),vec3(1.24,.74,1.04),uH1.z);
+  vec3 midGain=mix(vec3(.82,1.14,1.22),vec3(1.20,.92,.76),uH0.y);
+  vec3 hiGain=mix(vec3(.72,.96,1.30),vec3(1.28,.80,1.03),uH2.y);
+  q*=mix(vec3(1.0),shGain,sh*amount*.56);
+  q*=mix(vec3(1.0),midGain,mid*amount*.46);
+  q*=mix(vec3(1.0),hiGain,hi*amount*.62);
+
+  float yy=max(lum(q),.001);
+  float contrast=mix(.88,1.22,uH2.y);
+  float y2=sat((yy-.5)*contrast+.5+(uH1.x-.5)*.08*amount);
+  q*=max(y2,.008)/yy;
+  float satAmt=mix(.74,1.62,uH2.z);
+  q=satAdjust(q,mix(1.0,satAmt,amount));
+  return mix(base,clamp(q,0.0,1.22),sat(amount));
 }
-vec3 spectrumGrade(vec3 base,float amount){
-  vec3 c=clamp(base,0.0,1.0);float y=lum(c);
-  float sh=1.0-smoothstep(.10,.54,y);float hi=smoothstep(.48,.95,y);float mid=sat(1.0-sh-hi);
-  vec3 g0=uC0/max(lum(uC0),.08);vec3 g1=uC1/max(lum(uC1),.08);vec3 g2=uC2/max(lum(uC2),.08);
-  vec3 gain=(g0*sh+g1*mid+g2*hi)/max(sh+mid+hi,.001);
-  gain=mix(vec3(1.0),gain,.08+.18*uColor);
-  float aSh=(uR0.x-.5)*1.30;float aMid=(uR0.y-.5)*1.60;float aHi=(uR0.z-.5)*1.20;
-  vec3 q=(hueRotateYIQ(c,aSh)*sh+hueRotateYIQ(c,aMid)*mid+hueRotateYIQ(c,aHi)*hi)/max(sh+mid+hi,.001);
-  q*=gain;
-  float qy=max(lum(q),.002);q*=max(y,.004)/qy;
-  q=satAdjust(q,mix(.88,1.34,uR1.z));
-  return mix(base,clamp(q,0.0,1.28),sat(amount));
+vec3 sourceColorMix(vec3 base,vec3 graded){
+  float keep=sat(uSourceColor);
+  keep=keep*keep*(3.0-2.0*keep);
+  float yg=max(lum(graded),.001);
+  float yb=max(lum(base),.018);
+  vec3 sourceTone=clamp(base*(yg/yb),0.0,1.28);
+  vec3 procChroma=graded-vec3(yg);
+  vec3 srcChroma=sourceTone-vec3(lum(sourceTone));
+  vec3 mixed=vec3(yg)+mix(procChroma,srcChroma,keep);
+  return clamp(mixed,0.0,1.24);
 }
-vec3 sourceColorRecovery(vec3 base,vec3 processed){
-  float keep=sat(uSourceColor);keep=keep*keep*(3.0-2.0*keep);
-  float yp=max(lum(processed),.002),yb=max(lum(base),.018);
-  vec3 src=clamp(base*(yp/yb),0.0,1.30);vec3 pc=processed-vec3(yp);vec3 sc=src-vec3(lum(src));
-  return clamp(vec3(yp)+mix(pc,sc,keep),0.0,1.30);
+vec3 softShoulder(vec3 c){return c/(vec3(1.0)+max(c-vec3(.70),vec3(0.0))*.88);}
+vec3 sampleBlur12(vec2 uv,vec2 radius){
+  vec3 s=texM(uv)*.20;
+  s+=texM(uv+radius*vec2(1,0))*.10;s+=texM(uv+radius*vec2(-1,0))*.10;
+  s+=texM(uv+radius*vec2(0,1))*.10;s+=texM(uv+radius*vec2(0,-1))*.10;
+  s+=texM(uv+radius*vec2(.8,.8))*.10;s+=texM(uv+radius*vec2(-.8,.8))*.10;
+  s+=texM(uv+radius*vec2(.8,-.8))*.10;s+=texM(uv+radius*vec2(-.8,-.8))*.10;
+  return s;
 }
-float beam(vec2 uv,vec2 origin,float angle,float width,float falloff){vec2 q=rot2(uv-origin,-angle);float fwd=smoothstep(-.08,.05,q.x);float w=max(.009,width+max(q.x,0.0)*.085);float cross=exp(-(q.y*q.y)/(w*w));float fade=exp(-max(q.x,0.0)*falloff);return fwd*cross*fade;}
-float lineGlow(vec2 uv,vec2 origin,float angle,float width,float falloff){vec2 q=rot2(uv-origin,-angle);float cross=exp(-(q.y*q.y)/max(width*width,.00005));float fade=exp(-abs(q.x)*falloff);return cross*fade;}
-float arcGlow(vec2 uv,vec2 center,float radius,float width,float phase){vec2 q=uv-center;float d=abs(length(q)-radius);float ring=exp(-(d*d)/max(width*width,.00003));float ang=atan(q.y,q.x);float gate=.30+.70*smoothstep(.08,.92,.5+.5*sin(ang*2.0+phase));return ring*gate;}
-float smokeTrail(vec2 uv,vec2 origin,float width,float height,float wind,float phase){
-  float rise=(origin.y-uv.y)/max(height,.06);float active=smoothstep(-.06,.05,rise)*(1.0-smoothstep(.94,1.25,rise));
-  float drift=(fbm4(vec2(rise*.92,phase*4.1)+12.0)-.5)*width*.78;
-  float center=origin.x+wind*rise+sin(rise*5.2+phase*6.2831)*width*.18+drift;
-  float w=width*(.42+max(rise,0.0)*.94)*(.80+.22*sin(rise*7.0+phase*4.0));
-  float xn=(uv.x-center)/max(abs(w),.016);vec2 p=vec2(xn*.60,rise*1.10);
-  float macro=fbm4(p*.86+phase*19.0);float inner=fbm4(p*1.58+phase*31.0);
-  float body=exp(-xn*xn*1.20)*active;float billow=smoothstep(.22,.78,macro*.66+inner*.34);return body*(.34+.66*billow);
+float beam(vec2 uv,vec2 origin,float angle,float width,float falloff){
+  vec2 q=rot2(uv-origin,-angle);
+  float fwd=smoothstep(-.08,.06,q.x);
+  float w=max(.012,width+max(q.x,0.0)*.12);
+  float cross=exp(-(q.y*q.y)/(w*w));
+  float fade=exp(-max(q.x,0.0)*falloff);
+  return fwd*cross*fade;
 }
+float smokePlume(vec2 uv,vec2 origin,float width,float height,float wind,float phase){
+  float rise=(origin.y-uv.y)/max(height,.05);
+  float active=smoothstep(-.08,.05,rise)*(1.0-smoothstep(.92,1.34,rise));
+  float slow=fbm(vec2(rise*.64,phase*3.7)+11.0)-.5;
+  float center=origin.x+wind*rise+sin((rise+phase)*4.4)*width*.13+slow*width*.34;
+  float w=width*(.54+max(rise,0.0)*.92);
+  float xn=(uv.x-center)/max(w,.015);
+  vec2 p=vec2(xn*.72,rise*1.34);
+  vec2 warp=vec2(fbm(p*.64+phase*9.0),fbm(p*.68+phase*15.0))-.5;
+  p+=warp*.42;
+  float macro=fbm(p*.78+phase*17.0);
+  float middle=fbm(p*1.48+phase*29.0);
+  float billow=smoothstep(.28,.74,macro*.68+middle*.32);
+  float envelope=exp(-xn*xn*1.16)*active;
+  float crown=smoothstep(.02,.26,rise)*(1.0-smoothstep(.78,1.28,rise));
+  return envelope*crown*(.48+.52*billow);
+}
+float grain(vec2 uv){return hash21(floor(uv*uResolution)+uSeed*17.0)-.5;}
 `;
+
 
 const HALO_FRAG = HALO_COMMON + `
 void main(){
-  vec2 uv=vTexCoord;vec3 base=tex(uv);vec2 px=vec2(1.0)/uResolution;
-  vec3 graded=sourceColorRecovery(base,spectrumGrade(base,.34+.30*uColor));
-  float th=mix(.82,.47,uLight);float b1=bright(uv,th);float b2=ringBright(uv,mix(8.0,24.0,uH0.z),th-.06);float b3=ringBright(uv,mix(26.0,62.0,uH1.w),th-.10);
-  float e=edge(uv,1.8/uResolution.x);float halo=sat(b1*.58+b2*.94+b3*.90+e*.20*uAtmosphere);
-  vec3 blur=sampleBlur9(uv,px*mix(9.0,25.0,uH0.x));vec3 outc=mix(graded,blur,halo*(.06+.20*uAtmosphere));
+  vec2 uv=vTexCoord;
+  vec3 base=tex(uv);
+  float y=lum(base);
+  vec2 px=vec2(1.0)/uResolution;
 
-  float side=step(.5,uR0.x);vec2 src=vec2(mix(-.14,1.14,side),mix(.08,.78,uR0.y));vec2 aim=vec2(.5,.48)-src;float a=atan(aim.y,aim.x);
-  float spread=mix(.08,.34,uR1.x);float rw=mix(.010,.034,uH0.w);
-  float r0=beam(uv,src,a-spread,rw*.72,mix(.34,.84,uR1.y));
-  float r1=beam(uv,src,a-spread*.45,rw,mix(.30,.78,uR1.z));
-  float r2=beam(uv,src,a,rw*1.24,mix(.28,.72,uH1.x));
-  float r3=beam(uv,src,a+spread*.52,rw*.88,mix(.34,.88,uH2.y));
-  float r4=beam(uv,src,a+spread,rw*.62,mix(.40,.96,uH2.w));
-  float noise=.64+.36*fbm4(uv*2.1+vec2(uSeed*.031,9.0));
-  float rayAmt=uLight*uAtmosphere*(.55+.65*uR2.x)*noise;
-  outc=screenBlend(outc,spectralColor(.03+uR0.z)*r0*rayAmt*.46);
-  outc=screenBlend(outc,spectralColor(.23+uR1.y)*r1*rayAmt*.58);
-  outc=screenBlend(outc,spectralColor(.46+uR2.y)*r2*rayAmt*.72);
-  outc=screenBlend(outc,spectralColor(.69+uR0.w)*r3*rayAmt*.54);
-  outc=screenBlend(outc,spectralColor(.88+uR2.z)*r4*rayAmt*.40);
+  vec3 graded=filmResponse(base,sat(uColor*1.18));
+  graded=sourceColorMix(base,graded);
 
-  vec2 axis=vec2(.5)-src;float flareGate=.52+.48*step(.28,uR2.w);
-  float f1=blob(uv,src+axis*.34,vec2(.045,.032)*(1.0+uR1.x),a)*flareGate;
-  float f2=blob(uv,src+axis*.62,vec2(.070,.045)*(1.0+uR0.z),a)*flareGate;
-  float f3=blob(uv,src+axis*1.08,vec2(.11,.055)*(1.0+uH2.z),a)*flareGate;
-  outc=screenBlend(outc,spectralColor(.18+uR2.x)*f1*(.10+.24*uLight));
-  outc=screenBlend(outc,spectralColor(.55+uR1.w)*f2*(.08+.20*uLight));
-  outc=screenBlend(outc,spectralColor(.82+uR0.y)*f3*(.06+.16*uLight));
+  float th=mix(.80,.49,uLight);
+  float b1=ringBright(uv,mix(2.0,5.5,uH0.y),th);
+  float b2=ringBright(uv,mix(8.0,20.0,uH0.z),th-.035);
+  float b3=ringBright(uv,mix(24.0,58.0,uH1.w),th-.085);
+  float e=edge(uv,2.0/uResolution.x);
+  float halo=sat((b1*.74+b2*.95+b3*.88)*(.78+uLight*1.52)+e*uAtmosphere*.34);
 
-  float arc=arcGlow(uv,src,mix(.30,.78,uH1.y),mix(.008,.022,uR2.z),uSeed*.11+uR1.x*6.2831);
-  arc*=uAtmosphere*(.10+.30*uLight)*(.45+.55*step(.38,uR2.y));outc=screenBlend(outc,spectralColor(.35+uR2.w)*arc);
+  vec3 blurWide=sampleBlur12(uv,px*mix(8.0,24.0,uH0.x));
+  float mist=(.06+.18*uAtmosphere)*smoothstep(.02,.82,halo+b3*.8);
+  vec3 outc=mix(graded,blurWide,mist);
 
-  float burn=blob(uv,src,vec2(mix(.28,.56,uH2.x),mix(.20,.48,uH1.z)),a)*(.18+.42*uLight);
-  burn*=smoothstep(.20,.92,fbm4((uv-src)*1.4+uSeed*.013));outc=screenBlend(outc,spectralColor(.70+uR1.z)*burn*.24);
-  float blow=sat((b1*.08+b2*.15+b3*.18)*uLight*(.95+uAtmosphere*.55));outc=mix(outc,vec3(1.0),blow);
-  outc+=vec3(grain(uv)*(.007+.014*uAtmosphere));outc=softShoulder(outc);gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
+  vec2 o1=vec2(-.12,mix(.10,.90,uH0.x));
+  vec2 o2=vec2(mix(.12,.88,uH1.x),- .10);
+  vec2 o3=vec2(1.12,mix(.08,.92,uH2.z));
+  float r1=beam(uv,o1,mix(-.30,.32,uH1.z),mix(.025,.090,uH0.w),mix(.45,1.35,uH2.y));
+  float r2=beam(uv,o2,mix(.95,1.65,uH2.x),mix(.018,.070,uH1.y),mix(.42,1.18,uH0.z));
+  float r3=beam(uv,o3,mix(2.78,3.46,uH2.w),mix(.018,.078,uH1.w),mix(.45,1.28,uH0.y));
+  float rayNoise=.72+.28*fbm(uv*2.1+uSeed*.031);
+  float rays=sat((r1*.88+r2*.72+r3*.62)*rayNoise*uLight*uAtmosphere);
+
+  vec3 cool=mix(vec3(.56,.80,1.0),vec3(.72,.62,1.0),uH2.x);
+  vec3 warm=mix(vec3(1.0,.70,.82),vec3(1.0,.84,.54),uH1.y);
+  vec3 haloCol=mix(cool,warm,uH0.w);
+  vec3 rayCol=mix(mix(vec3(.72,.92,1.0),vec3(1.0,.66,.86),uH2.z),vec3(1.0,.92,.62),uH2.w*.34);
+
+  outc=screenBlend(outc,haloCol*halo*(.28+1.02*uLight));
+  outc=screenBlend(outc,rayCol*rays*(.22+.76*uColor));
+
+  float blow=sat((b1*.05+b2*.13+b3*.19)*uLight*(.92+uAtmosphere*.55));
+  outc=mix(outc,vec3(1.0),blow);
+
+  float leakField=smoothstep(.54,.90,fbm(rot2(uv-.5,(uH1.x-.5)*1.4)*mix(.82,1.48,uH0.z)+uSeed*.013));
+  leakField*=uAtmosphere*uColor*(.10+.18*uH2.y);
+  vec3 leakCol=mix(vec3(.48,.78,1.0),vec3(1.0,.52,.76),uH1.z);
+  leakCol=mix(leakCol,vec3(.98,.84,.48),uH2.w*.28);
+  outc=screenBlend(outc,leakCol*leakField);
+
+  float g=grain(uv)*(.010+.018*uAtmosphere);
+  outc+=vec3(g);
+  gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
 }`;
+
 
 const PRISM_COMMON = `
 precision highp float;
@@ -166,98 +230,239 @@ uniform float uSeed;
 uniform vec4 uH0;
 uniform vec4 uH1;
 uniform vec4 uH2;
-uniform vec4 uR0;
-uniform vec4 uR1;
-uniform vec4 uR2;
-uniform vec3 uC0;
-uniform vec3 uC1;
-uniform vec3 uC2;
-uniform vec3 uC3;
 
-float sat(float x){return clamp(x,0.0,1.0);}
+float sat(float x){return clamp(x,0.0,1.0);} 
 float lum(vec3 c){return dot(c,vec3(.2126,.7152,.0722));}
-vec2 mirrorUV(vec2 uv){vec2 q=mod(uv,2.0);return 1.0-abs(q-1.0);}
+vec2 mirrorUV(vec2 uv){vec2 q=mod(uv,2.0);return 1.0-abs(q-1.0);} 
+vec3 tex(vec2 uv){return texture2D(uTex,clamp(uv,0.0,1.0)).rgb;}
 vec3 texM(vec2 uv){return texture2D(uTex,mirrorUV(uv)).rgb;}
-float hash21(vec2 p){p=fract(p*vec2(123.34,345.45));p+=dot(p,p+34.345);return fract(p.x*p.y);}
-float noise2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);float a=hash21(i),b=hash21(i+vec2(1,0)),c=hash21(i+vec2(0,1)),d=hash21(i+vec2(1,1));return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}
-float fbm4(vec2 p){float v=0.0,a=.52;mat2 m=mat2(1.57,1.11,-1.11,1.57);for(int i=0;i<4;i++){v+=a*noise2(p);p=m*p+13.71;a*=.48;}return v;}
+float hash21(vec2 p){p=fract(p*vec2(123.34,345.45));p+=dot(p,p+34.345);return fract(p.x*p.y);} 
+float noise2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*f*(f*(f*6.0-15.0)+10.0);float a=hash21(i),b=hash21(i+vec2(1,0)),c=hash21(i+vec2(0,1)),d=hash21(i+vec2(1,1));return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);} 
+float fbm(vec2 p){float v=0.0,a=.5;mat2 m=mat2(1.53,1.17,-1.17,1.53);for(int i=0;i<6;i++){v+=a*noise2(p);p=m*p+17.13;a*=.5;}return v;}
 float ridge(float x){return 1.0-abs(2.0*x-1.0);}
+float edge(vec2 uv,float px){vec2 dx=vec2(px,0),dy=vec2(0,px);float ex=abs(lum(texM(uv+dx))-lum(texM(uv-dx)));float ey=abs(lum(texM(uv+dy))-lum(texM(uv-dy)));return sat((ex+ey)*2.15);} 
+float bright(vec2 uv,float t){float y=lum(texM(uv));return smoothstep(t-.055,t+.075,y)*sat((y-t+.08)/(1.08-t));}
+float ringBright(vec2 uv,float r,float t){vec2 px=vec2(1.0)/uResolution;vec2 x=vec2(r*px.x,0),y=vec2(0,r*px.y);float s=0.0;s+=bright(uv+x,t);s+=bright(uv-x,t);s+=bright(uv+y,t);s+=bright(uv-y,t);s+=bright(uv+x+y,t);s+=bright(uv+x-y,t);s+=bright(uv-x+y,t);s+=bright(uv-x-y,t);return s*.125;}
+vec3 screenBlend(vec3 a,vec3 b){return 1.0-(1.0-a)*(1.0-b);} 
+vec3 softLight(vec3 b,vec3 s){return mix(sqrt(max(b,0.0))*(2.0*s-1.0)+2.0*b*(1.0-s),b-(1.0-2.0*s)*b*(1.0-b),step(.5,s));}
 vec2 rot2(vec2 p,float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c)*p;}
-float ellipseField(vec2 uv,vec2 c,vec2 sz,float a){vec2 q=rot2(uv-c,a)/max(sz,vec2(.001));return exp(-dot(q,q)*2.20);}
-float edge(vec2 uv,float px){vec2 dx=vec2(px,0),dy=vec2(0,px);float ex=abs(lum(texM(uv+dx))-lum(texM(uv-dx)));float ey=abs(lum(texM(uv+dy))-lum(texM(uv-dy)));return sat((ex+ey)*2.10);}
-float bright(vec2 uv,float t){float y=lum(texM(uv));return smoothstep(t-.06,t+.08,y)*sat((y-t+.09)/(1.08-t));}
-vec3 screenBlend(vec3 a,vec3 b){return 1.0-(1.0-a)*(1.0-b);}
-vec3 softShoulder(vec3 c){return c/(vec3(1.0)+max(c-vec3(.72),vec3(0.0))*.88);}
+float blob(vec2 uv,vec2 c,vec2 size,float a){vec2 q=rot2(uv-c,a)/max(size,vec2(.001));return exp(-dot(q,q)*2.15);} 
+vec3 paletteMap(vec3 base,vec3 lo,vec3 mid,vec3 hi,float amount){
+  float y=lum(base);
+  vec3 p=mix(lo,mid,smoothstep(.02,.58,y));
+  p=mix(p,hi,smoothstep(.42,.98,y));
+  vec3 mapped=p*mix(.40,1.32,y);
+  return mix(base,clamp(mapped,0.0,1.0),sat(amount));
+}
+vec3 hueRotateYIQ(vec3 c,float a){
+  float Y=dot(c,vec3(.299,.587,.114));
+  float I=dot(c,vec3(.596,-.274,-.322));
+  float Q=dot(c,vec3(.211,-.523,.312));
+  float cs=cos(a),sn=sin(a);
+  float I2=I*cs-Q*sn;
+  float Q2=I*sn+Q*cs;
+  return vec3(Y+.956*I2+.621*Q2,Y-.272*I2-.647*Q2,Y-1.106*I2+1.703*Q2);
+}
+vec3 satAdjust(vec3 c,float amount){float y=lum(c);return mix(vec3(y),c,amount);}
+vec3 filmResponse(vec3 base,float amount){
+  vec3 c=clamp(base,0.0,1.0);
+  float y=lum(c);
+  float sh=1.0-smoothstep(.10,.58,y);
+  float hi=smoothstep(.44,.96,y);
+  float mid=sat(1.0-sh-hi);
+  float wsum=max(sh+mid+hi,.001);
+
+  float aSh=(uH0.x-.5)*2.05;
+  float aMid=(uH1.y-.5)*2.55;
+  float aHi=(uH2.w-.5)*1.85;
+  vec3 shC=hueRotateYIQ(c,aSh);
+  vec3 midC=hueRotateYIQ(c,aMid);
+  vec3 hiC=hueRotateYIQ(c,aHi);
+  vec3 x=(shC*sh+midC*mid+hiC*hi)/wsum;
+
+  vec3 q;
+  q.r=x.r*(.72+.34*uH0.w)+x.g*(.04+.22*uH1.x)+x.b*(.02+.18*uH2.z);
+  q.g=x.g*(.72+.31*uH1.y)+x.b*(.04+.19*uH0.x)+x.r*(.02+.15*uH2.w);
+  q.b=x.b*(.72+.34*uH2.x)+x.r*(.04+.23*uH1.z)+x.g*(.02+.17*uH0.z);
+
+  float yq=max(lum(q),.001);
+  float targetY=mix(y,yq,.16+.16*uH1.w);
+  q*=targetY/yq;
+
+  vec3 shGain=mix(vec3(.72,.91,1.28),vec3(1.24,.74,1.04),uH1.z);
+  vec3 midGain=mix(vec3(.82,1.14,1.22),vec3(1.20,.92,.76),uH0.y);
+  vec3 hiGain=mix(vec3(.72,.96,1.30),vec3(1.28,.80,1.03),uH2.y);
+  q*=mix(vec3(1.0),shGain,sh*amount*.56);
+  q*=mix(vec3(1.0),midGain,mid*amount*.46);
+  q*=mix(vec3(1.0),hiGain,hi*amount*.62);
+
+  float yy=max(lum(q),.001);
+  float contrast=mix(.88,1.22,uH2.y);
+  float y2=sat((yy-.5)*contrast+.5+(uH1.x-.5)*.08*amount);
+  q*=max(y2,.008)/yy;
+  float satAmt=mix(.74,1.62,uH2.z);
+  q=satAdjust(q,mix(1.0,satAmt,amount));
+  return mix(base,clamp(q,0.0,1.22),sat(amount));
+}
+vec3 sourceColorMix(vec3 base,vec3 graded){
+  float keep=sat(uSourceColor);
+  keep=keep*keep*(3.0-2.0*keep);
+  float yg=max(lum(graded),.001);
+  float yb=max(lum(base),.018);
+  vec3 sourceTone=clamp(base*(yg/yb),0.0,1.28);
+  vec3 procChroma=graded-vec3(yg);
+  vec3 srcChroma=sourceTone-vec3(lum(sourceTone));
+  vec3 mixed=vec3(yg)+mix(procChroma,srcChroma,keep);
+  return clamp(mixed,0.0,1.24);
+}
+vec3 softShoulder(vec3 c){return c/(vec3(1.0)+max(c-vec3(.70),vec3(0.0))*.88);}
+vec3 sampleBlur12(vec2 uv,vec2 radius){
+  vec3 s=texM(uv)*.20;
+  s+=texM(uv+radius*vec2(1,0))*.10;s+=texM(uv+radius*vec2(-1,0))*.10;
+  s+=texM(uv+radius*vec2(0,1))*.10;s+=texM(uv+radius*vec2(0,-1))*.10;
+  s+=texM(uv+radius*vec2(.8,.8))*.10;s+=texM(uv+radius*vec2(-.8,.8))*.10;
+  s+=texM(uv+radius*vec2(.8,-.8))*.10;s+=texM(uv+radius*vec2(-.8,-.8))*.10;
+  return s;
+}
+float beam(vec2 uv,vec2 origin,float angle,float width,float falloff){
+  vec2 q=rot2(uv-origin,-angle);
+  float fwd=smoothstep(-.08,.06,q.x);
+  float w=max(.012,width+max(q.x,0.0)*.12);
+  float cross=exp(-(q.y*q.y)/(w*w));
+  float fade=exp(-max(q.x,0.0)*falloff);
+  return fwd*cross*fade;
+}
+float smokePlume(vec2 uv,vec2 origin,float width,float height,float wind,float phase){
+  float rise=(origin.y-uv.y)/max(height,.05);
+  float active=smoothstep(-.08,.05,rise)*(1.0-smoothstep(.92,1.34,rise));
+  float slow=fbm(vec2(rise*.64,phase*3.7)+11.0)-.5;
+  float center=origin.x+wind*rise+sin((rise+phase)*4.4)*width*.13+slow*width*.34;
+  float w=width*(.54+max(rise,0.0)*.92);
+  float xn=(uv.x-center)/max(w,.015);
+  vec2 p=vec2(xn*.72,rise*1.34);
+  vec2 warp=vec2(fbm(p*.64+phase*9.0),fbm(p*.68+phase*15.0))-.5;
+  p+=warp*.42;
+  float macro=fbm(p*.78+phase*17.0);
+  float middle=fbm(p*1.48+phase*29.0);
+  float billow=smoothstep(.28,.74,macro*.68+middle*.32);
+  float envelope=exp(-xn*xn*1.16)*active;
+  float crown=smoothstep(.02,.26,rise)*(1.0-smoothstep(.78,1.28,rise));
+  return envelope*crown*(.48+.52*billow);
+}
 float grain(vec2 uv){return hash21(floor(uv*uResolution)+uSeed*17.0)-.5;}
-vec3 satAdjust(vec3 c,float a){float y=lum(c);return mix(vec3(y),c,a);}
-vec3 hueRotateYIQ(vec3 c,float a){float Y=dot(c,vec3(.299,.587,.114));float I=dot(c,vec3(.596,-.274,-.322));float Q=dot(c,vec3(.211,-.523,.312));float cs=cos(a),sn=sin(a);float I2=I*cs-Q*sn;float Q2=I*sn+Q*cs;return vec3(Y+.956*I2+.621*Q2,Y-.272*I2-.647*Q2,Y-1.106*I2+1.703*Q2);}
-vec3 spectralColor(float t){t=fract(t);vec3 rb=.54+.46*cos(6.2831853*(t+vec3(.00,.67,.33)));vec3 a=mix(uC0,uC1,smoothstep(.00,.48,t));vec3 b=mix(uC2,uC3,smoothstep(.52,1.00,t));vec3 pal=mix(a,b,smoothstep(.28,.72,t));return clamp(mix(pal,rb,.36+.34*uColor),0.0,1.24);}
-vec3 prismGrade(vec3 base){float y=lum(base);vec3 q=base;float sh=1.0-smoothstep(.10,.56,y),hi=smoothstep(.48,.94,y),mid=sat(1.0-sh-hi);q=(hueRotateYIQ(q,(uR0.x-.5)*.72)*sh+hueRotateYIQ(q,(uR0.y-.5)*1.05)*mid+hueRotateYIQ(q,(uR0.z-.5)*.82)*hi)/max(sh+mid+hi,.001);q=satAdjust(q,.96+.30*uColor);return clamp(q,0.0,1.18);}
-vec3 sourceColorRecovery(vec3 base,vec3 processed){float keep=sat(uSourceColor);keep=keep*keep*(3.0-2.0*keep);float yp=max(lum(processed),.002),yb=max(lum(base),.018);vec3 src=clamp(base*(yp/yb),0.0,1.30);vec3 pc=processed-vec3(yp);vec3 sc=src-vec3(lum(src));return clamp(vec3(yp)+mix(pc,sc,keep),0.0,1.30);}
-float beam(vec2 uv,vec2 origin,float angle,float width,float falloff){vec2 q=rot2(uv-origin,-angle);float fwd=smoothstep(-.08,.05,q.x);float w=max(.007,width+max(q.x,0.0)*.074);return fwd*exp(-(q.y*q.y)/(w*w))*exp(-max(q.x,0.0)*falloff);}
-float arcGlow(vec2 uv,vec2 center,float radius,float width,float phase){vec2 q=uv-center;float d=abs(length(q)-radius);float ring=exp(-(d*d)/max(width*width,.00002));float ang=atan(q.y,q.x);float gate=.18+.82*smoothstep(.12,.90,.5+.5*sin(ang*2.4+phase));return ring*gate;}
+
+vec3 prismSpectrum(float t){
+  t=fract(t);
+  return clamp(.54+.46*cos(6.2831853*(t+vec3(.00,.67,.33))),0.0,1.0);
+}
+float prismArc(vec2 uv,vec2 center,float radius,float width,float phase){
+  vec2 q=uv-center;
+  float d=abs(length(q)-radius);
+  float ring=exp(-(d*d)/max(width*width,.000025));
+  float ang=atan(q.y,q.x);
+  float gate=.18+.82*smoothstep(.12,.92,.5+.5*sin(ang*2.25+phase));
+  return ring*gate;
+}
 `;
+
 
 const PRISM_FRAG = PRISM_COMMON + `
 void main(){
-  vec2 uv=vTexCoord;vec2 px=vec2(1.0)/uResolution;vec3 base=texM(uv);
-  vec3 scene=sourceColorRecovery(base,prismGrade(base));
+  vec2 uv=vTexCoord;
+  vec3 base=tex(uv);
+  vec2 px=vec2(1.0)/uResolution;
 
-  float a0=uH0.x*6.2831853;float a1=a0+mix(.62,1.42,uR2.x);float a2=a0-mix(.48,1.18,uR1.w);
-  vec2 d0=vec2(cos(a0),sin(a0));vec2 d1=vec2(cos(a1),sin(a1));vec2 d2=vec2(cos(a2),sin(a2));
-  vec2 c0=vec2(mix(.12,.88,uR0.x),mix(.12,.88,uR0.y));
-  vec2 c1=vec2(mix(.10,.90,uR1.x),mix(.10,.90,uR1.y));
-  vec2 c2=vec2(mix(.12,.88,uR2.y),mix(.12,.88,uR2.z));
-  float z0=ellipseField(uv,c0,vec2(mix(.20,.48,uH0.y),mix(.08,.24,uH0.z)),a0);
-  float z1=ellipseField(uv,c1,vec2(mix(.16,.40,uH1.x),mix(.09,.28,uH1.y)),a1);
-  float z2=ellipseField(uv,c2,vec2(mix(.14,.34,uH2.x),mix(.08,.23,uH2.y)),a2);
-  float fracture=sat(z0*.94+z1*.82+z2*.72);
+  vec3 scene=filmResponse(base,sat(uColor*1.12));
+  scene=sourceColorMix(base,scene);
 
-  float n0=fbm4(rot2(uv-.5,a0)*2.2+vec2(uSeed*.013,7.0));
-  float n1=fbm4(rot2(uv-.5,a1)*3.1+vec2(19.0,uSeed*.017));
-  vec2 flow=vec2(n0-.5,n1-.5);
-  float spread=mix(9.0,52.0,uLight)*(.82+.72*uAtmosphere);
-  vec2 off0=(d0*(.52+z0)+d1*z1*.44+flow*.34)*px*spread;
-  vec2 off1=(d1*(.48+z1)+d2*z2*.46-flow*.28)*px*spread;
-  vec2 off2=(d2*(.54+z2)-d0*z0*.34+flow*.22)*px*spread;
+  // Three soft optical volumes: no hard polygon masks.
+  float a0=mix(-2.65,2.65,uH0.x);
+  float a1=a0+mix(.62,1.46,uH1.x);
+  float a2=a0-mix(.54,1.24,uH2.x);
+  vec2 d0=vec2(cos(a0),sin(a0));
+  vec2 d1=vec2(cos(a1),sin(a1));
+  vec2 d2=vec2(cos(a2),sin(a2));
 
-  vec3 refrA=vec3(texM(uv+off0*1.65).r,texM(uv-off1*.32).g,texM(uv-off2*1.58).b);
-  vec3 refrB=vec3(texM(uv-off1*1.38).r,texM(uv+off2*.22).g,texM(uv+off0*1.44).b);
-  float flip=smoothstep(.40,.72,fbm4(uv*1.28+vec2(33.0,uSeed*.01)));
-  vec3 refr=mix(refrA,refrB,flip*z1*.68);
-  vec3 ghost=texM(uv+(d0*z0-d1*z1+d2*z2)*px*spread*2.1);
-  float local=sat(fracture*(.70+.52*uAtmosphere)+edge(uv,1.5/uResolution.x)*.36+bright(uv,mix(.77,.46,uLight))*.44);
-  vec3 outc=mix(scene,refr,local*(.34+.46*uColor));
-  outc=mix(outc,ghost,sat((z0*z1+z1*z2+z0*z2)*(.08+.18*uAtmosphere)));
+  vec2 c0=vec2(mix(.08,.92,uH0.y),mix(.10,.90,uH1.y));
+  vec2 c1=vec2(mix(.08,.92,uH2.y),mix(.12,.88,uH0.w));
+  vec2 c2=vec2(mix(.10,.90,uH1.z),mix(.10,.90,uH2.w));
+  float z0=blob(uv,c0,vec2(mix(.18,.42,uH0.z),mix(.11,.30,uH1.w)),a0);
+  float z1=blob(uv,c1,vec2(mix(.15,.36,uH1.x),mix(.10,.27,uH2.z)),a1);
+  float z2=blob(uv,c2,vec2(mix(.14,.32,uH2.x),mix(.09,.24,uH0.y)),a2);
+  float zone=sat(z0*.92+z1*.84+z2*.76);
 
-  float plane0=pow(ridge(.5+.5*sin(dot(uv,d1)*mix(18.0,36.0,uH1.z)+n0*5.6+uSeed*.17)),10.0);
-  float plane1=pow(ridge(.5+.5*sin(dot(uv,d2)*mix(28.0,56.0,uH2.z)-n1*6.2+uSeed*.11)),13.0);
-  float diffraction=sat((plane0*.72+plane1*.58)*fracture*(.56+.72*uAtmosphere));
-  vec3 spec=spectralColor(dot(uv,d0)*2.4+n0*.66+uR0.w);
-  outc=screenBlend(outc,spec*diffraction*(.24+.48*uColor));
+  float n0=fbm(rot2(uv-.5,a0)*1.72+vec2(uSeed*.013,7.0));
+  float n1=fbm(rot2(uv-.5,a1)*2.16+vec2(17.0,uSeed*.017));
+  vec2 flow=vec2(noise2(uv*2.8+vec2(uSeed,3.0))-.5,noise2(uv*2.6+vec2(11.0,uSeed))-.5);
 
-  float ca0=pow(ridge(fbm4(rot2(uv-c0,a1)*3.0+uSeed*.021)),7.0)*z0;
-  float ca1=pow(ridge(fbm4(rot2(uv-c1,a2)*3.8+17.0+uSeed*.018)),8.0)*z1;
-  outc=screenBlend(outc,spectralColor(.22+n0+uR1.z)*ca0*(.16+.34*uLight));
-  outc=screenBlend(outc,spectralColor(.62+n1+uR2.w)*ca1*(.12+.30*uLight));
+  float spread=mix(6.0,46.0,uLight)*(.86+.74*uAtmosphere);
+  vec2 v0=(d0*(.56+.80*z0)+flow*.34)*px*spread;
+  vec2 v1=(d1*(.50+.78*z1)-flow*.26)*px*spread;
+  vec2 v2=(d2*(.46+.74*z2)+flow*.20)*px*spread;
 
-  float side=step(.5,uR2.w);vec2 src=vec2(mix(-.12,1.12,side),mix(.08,.84,uH2.w));vec2 aim=vec2(.5)-src;float ba=atan(aim.y,aim.x);float bs=mix(.10,.30,uR0.z);
-  float br0=beam(uv,src,ba-bs,mix(.007,.020,uH0.w),mix(.34,.80,uR0.y));
-  float br1=beam(uv,src,ba,mix(.010,.026,uH1.w),mix(.30,.70,uR1.z));
-  float br2=beam(uv,src,ba+bs,mix(.006,.018,uH2.w),mix(.40,.90,uR2.x));
-  float rayGate=uLight*uAtmosphere*(.48+.64*uR2.y);
-  outc=screenBlend(outc,spectralColor(.06+uR0.x)*br0*rayGate*.42);
-  outc=screenBlend(outc,spectralColor(.42+uR1.x)*br1*rayGate*.52);
-  outc=screenBlend(outc,spectralColor(.78+uR2.z)*br2*rayGate*.36);
+  vec3 refr0=vec3(texM(uv+v0*1.62).r,texM(uv+v0*.18).g,texM(uv-v0*1.42).b);
+  vec3 refr1=vec3(texM(uv-v1*1.36).r,texM(uv+v1*.14).g,texM(uv+v1*1.54).b);
+  vec3 refr2=vec3(texM(uv+v2*1.46).r,texM(uv-v2*.10).g,texM(uv-v2*1.58).b);
+  float sum=max(z0+z1+z2,.001);
+  vec3 refr=(refr0*z0+refr1*z1+refr2*z2)/sum;
+  refr=mix(scene,refr,sat(sum));
 
-  float arc0=arcGlow(uv,c0,mix(.16,.54,uH2.x),mix(.005,.015,uR1.x),uSeed*.14);
-  float arc1=arcGlow(uv,c2,mix(.12,.46,uH1.w),mix(.004,.013,uR2.y),uSeed*.19+2.1);
-  outc=screenBlend(outc,spectralColor(.35+uR0.y)*arc0*z0*(.14+.28*uLight));
-  outc=screenBlend(outc,spectralColor(.68+uR1.y)*arc1*z2*(.12+.24*uLight));
+  float e=edge(uv,1.6/uResolution.x);
+  float hi=bright(uv,mix(.75,.44,uLight));
+  float opticalMask=sat(zone*(.82+.42*uAtmosphere)+e*.28+hi*.36);
+  vec3 outc=mix(scene,refr,opticalMask*(.32+.42*uColor+.16*uLight));
 
-  outc+=vec3(grain(uv)*.006);outc=softShoulder(outc);gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
+  // Diffraction sheets cross the refracted zones at two scales.
+  vec2 q0=rot2(uv-.5,a0);
+  vec2 q1=rot2(uv-.5,a1);
+  float band0=pow(sat(.5+.5*sin(q0.x*mix(18.0,38.0,uH1.z)+n0*6.0+uSeed*.17)),9.0);
+  float band1=pow(sat(.5+.5*sin((q1.x*.72+q1.y*.34)*mix(28.0,58.0,uH2.z)-n1*6.5+uSeed*.11)),12.0);
+  float dif0=band0*smoothstep(.08,.82,z0+z1*.55)*uAtmosphere;
+  float dif1=band1*smoothstep(.08,.82,z1+z2*.62)*uAtmosphere;
+  outc=screenBlend(outc,prismSpectrum(q0.x*1.9+n0*.42+uH0.w)*dif0*(.14+.38*uColor));
+  outc=screenBlend(outc,prismSpectrum(q1.y*2.3+n1*.48+uH1.w)*dif1*(.10+.32*uColor));
+
+  // Caustic light behaves like bent glass, not an overlay wash.
+  float ca0=pow(ridge(fbm(rot2(uv-c0,a1)*3.0+uSeed*.021)),7.0)*z0;
+  float ca1=pow(ridge(fbm(rot2(uv-c1,a2)*3.7+17.0+uSeed*.018)),8.0)*z1;
+  float ca2=pow(ridge(fbm(rot2(uv-c2,a0)*4.2+31.0+uSeed*.015)),9.0)*z2;
+  outc=screenBlend(outc,prismSpectrum(.12+n0+uH2.y)*ca0*(.15+.36*uLight));
+  outc=screenBlend(outc,prismSpectrum(.48+n1+uH0.z)*ca1*(.12+.32*uLight));
+  outc=screenBlend(outc,prismSpectrum(.78+n0-n1+uH1.y)*ca2*(.10+.28*uLight));
+
+  // Large spectral rays give each REVEAL a clear optical event.
+  float side=step(.5,uH2.z);
+  vec2 src=vec2(mix(-.12,1.12,side),mix(.08,.86,uH0.x));
+  vec2 aim=vec2(.50,.48)-src;
+  float ba=atan(aim.y,aim.x);
+  float bs=mix(.09,.29,uH1.x);
+  float br0=beam(uv,src,ba-bs,mix(.010,.030,uH0.w),mix(.34,.82,uH2.y));
+  float br1=beam(uv,src,ba,mix(.014,.040,uH1.y),mix(.28,.72,uH0.z));
+  float br2=beam(uv,src,ba+bs,mix(.009,.026,uH2.w),mix(.38,.90,uH1.z));
+  float rayNoise=.68+.32*fbm(uv*1.9+vec2(uSeed*.027,9.0));
+  float rayGate=uLight*uAtmosphere*(.58+.42*zone)*rayNoise;
+  outc=screenBlend(outc,prismSpectrum(.04+uH0.x)*br0*rayGate*.44);
+  outc=screenBlend(outc,prismSpectrum(.39+uH1.x)*br1*rayGate*.56);
+  outc=screenBlend(outc,prismSpectrum(.76+uH2.x)*br2*rayGate*.40);
+
+  // Curved lens arcs and highlight bloom retain a photographic source.
+  float arc0=prismArc(uv,c0,mix(.16,.52,uH2.x),mix(.005,.016,uH1.w),uSeed*.13);
+  float arc1=prismArc(uv,c2,mix(.14,.46,uH1.y),mix(.004,.014,uH0.w),uSeed*.19+2.0);
+  outc=screenBlend(outc,prismSpectrum(.26+uH0.y)*arc0*z0*(.12+.30*uLight));
+  outc=screenBlend(outc,prismSpectrum(.64+uH2.y)*arc1*z2*(.10+.26*uLight));
+
+  float rb1=ringBright(uv,mix(7.0,19.0,uH1.w),mix(.70,.47,uLight));
+  float rb2=ringBright(uv,mix(20.0,48.0,uH0.z),mix(.66,.43,uLight));
+  float bloom=sat((rb1*.72+rb2*.66+hi*.40)*uLight);
+  outc=screenBlend(outc,prismSpectrum(.18+n0*.30)*bloom*(.20+.26*uAtmosphere));
+  float blow=sat((hi*.08+rb1*.08+rb2*.11)*uLight*(.70+.55*uAtmosphere));
+  outc=mix(outc,vec3(1.0),blow*.34);
+
+  outc+=vec3(grain(uv)*(.006+.006*uAtmosphere));
+  gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
 }
 `;
+
 
 const SMOKE_COMMON = `
 precision highp float;
@@ -609,7 +814,7 @@ function makeRecipe(mode){
   if(mode==='PRISM') pool=[0,1,2,3,5,7,8,9];
   const s=SPECTRA[pool[Math.floor(rnd()*pool.length)]];
   let h0,h1,h2,count;
-  if(mode==='HALO'){h0=[r(.08,.94),r(.08,.94),r(.08,.92),rnd()];h1=[rnd(),rnd(),rnd(),rnd()];h2=[rnd(),rnd(),rnd(),rnd()];count=34;}
+  if(mode==='HALO'){h0=[r(.08,.94),r(.08,.94),r(.08,.92),rnd()];h1=[rnd(),rnd(),rnd(),rnd()];h2=[rnd(),rnd(),rnd(),rnd()];count=16;}
   else if(mode==='VEIL'){h0=[rnd(),r(.18,.98),r(.24,.98),rnd()];h1=[r(.10,.98),r(.12,.98),rnd(),r(.12,.98)];h2=[r(.10,.98),r(.10,.98),rnd(),r(.14,.98)];count=42;}
   else if(mode==='SMOKE'){h0=[r(.16,.94),r(.08,.94),r(.22,.98),rnd()];h1=[r(.16,.96),r(.20,.98),rnd(),r(.22,.98)];h2=[r(.14,.96),r(.14,.96),rnd(),r(.18,.98)];count=40;}
   else{h0=[rnd(),r(.52,1.0),r(.18,.98),rnd()];h1=[r(.52,1.0),r(.20,.98),rnd(),r(.18,.98)];h2=[r(.18,.98),r(.18,.98),rnd(),r(.18,.98)];count=48;}
@@ -619,11 +824,14 @@ function makeRecipe(mode){
 function updateVariation(){if(ui.variationMeta) ui.variationMeta.textContent='CATALOGUE / '+APP.mode+' / '+String(APP.recipe?.id||1).padStart(2,'0')+' / '+(APP.recipe?.spectrum||'—');}
 function pulseButton(){ui.revealButton.animate([{transform:'translateX(0)'},{transform:'translateX(5px)'},{transform:'translateX(0)'}],{duration:180,easing:'ease-out'});}
 
-function setUniforms(sh,w,h){
+function setUniforms(sh,w,h,mode=APP.mode){
   sh.setUniform('uTex',APP.source);sh.setUniform('uResolution',[w,h]);
   sh.setUniform('uLight',APP.params.light/100);sh.setUniform('uAtmosphere',APP.params.atmosphere/100);sh.setUniform('uColor',APP.params.color/100);sh.setUniform('uSourceColor',APP.params.sourceColor/100);
   sh.setUniform('uSeed',APP.recipe.seed);sh.setUniform('uH0',APP.recipe.h0);sh.setUniform('uH1',APP.recipe.h1);sh.setUniform('uH2',APP.recipe.h2);
-  sh.setUniform('uR0',APP.recipe.r0);sh.setUniform('uR1',APP.recipe.r1);sh.setUniform('uR2',APP.recipe.r2);sh.setUniform('uC0',APP.recipe.c0);sh.setUniform('uC1',APP.recipe.c1);sh.setUniform('uC2',APP.recipe.c2);sh.setUniform('uC3',APP.recipe.c3);
+  if(mode==='SMOKE'||mode==='VEIL'){
+    sh.setUniform('uR0',APP.recipe.r0);sh.setUniform('uR1',APP.recipe.r1);sh.setUniform('uR2',APP.recipe.r2);
+    sh.setUniform('uC0',APP.recipe.c0);sh.setUniform('uC1',APP.recipe.c1);sh.setUniform('uC2',APP.recipe.c2);sh.setUniform('uC3',APP.recipe.c3);
+  }
 }
 
 function renderPreview(){
@@ -650,7 +858,7 @@ async function saveHighRes(){
     else{outH=longSide;outW=Math.max(2,Math.round(longSide*ratio));}
     g=createGraphics(outW,outH,WEBGL);g.pixelDensity(1);g.noStroke();
     const sh=g.createShader(VERT,shaderSourceFor(APP.mode));
-    g.shader(sh);setUniforms(sh,outW,outH);g.clear();g.plane(outW,outH,1,1);g.resetShader();
+    g.shader(sh);setUniforms(sh,outW,outH,APP.mode);g.clear();g.plane(outW,outH,1,1);g.resetShader();
     await new Promise(r=>setTimeout(r,80));
     const blob=await canvasToBlob(g.canvas,'image/png');
     const base=(APP.sourceName||'dream-catalogue').replace(/\.[^.]+$/,'').replace(/[^a-z0-9_-]+/gi,'_');

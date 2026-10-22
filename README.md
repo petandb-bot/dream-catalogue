@@ -1,4 +1,4 @@
-# DREAM CATALOGUE v0.2.7
+# DREAM CATALOGUE v0.2.8
 
 Optical Phenomena Engine rebuild.
 
@@ -19,7 +19,7 @@ This version keeps the existing interface while rebuilding the image engine arou
 FULL/GitHub builds include the PWA manifest, service worker and icons. The p5 Web Editor build excludes PWA registration files.
 
 
-## v0.2.7 PHENOMENA EXPANSION
+## v0.2.8 PHENOMENA EXPANSION
 - Rebuilt optical color so light is no longer a single flat tint.
 - HALO: spectral ray fan, flare ghosts, arcs and exposure burns.
 - VEIL: iridescent thin-film interference, luminous creases and wet-lens arcs.
@@ -28,9 +28,15 @@ FULL/GitHub builds include the PWA manifest, service worker and icons. The p5 We
 - Kept the renderer static and GPU-first; FBM remains four octaves.
 
 
-## v0.2.7 FOUR ENGINES
+## v0.2.8 OPTICAL ENGINES
 - HALO: v0.2.5 engine frozen exactly (common GLSL + fragment shader + HALO recipe branch).
 - PRISM: independent optical-fracture engine with three refractive zones, multi-axis chromatic separation, diffraction planes, caustics, rays and arcs.
 - SMOKE: independent volumetric-scattering engine. Neutral density and Beer-Lambert-style RGB transmission replace the previous color-screen look; spectral color appears mainly in backscatter and beams.
 - VEIL: independent thin-film/membrane engine with thickness fields, refraction, interference gain, liquid-lens pockets, folds, arcs and pearlescent scattering.
 - Runtime remains one static WEBGL fragment-shader pass per mode; no animation or CPU particle simulation.
+
+
+v0.2.8 optical engine notes
+- HALO restored from the accepted v0.2.3.4 engine, including its uncompressed white blowout behavior.
+- PRISM rebuilt from the photographic v0.2.3.4 direction with stronger soft refraction, diffraction, caustics, rays and lens arcs.
+- SMOKE and VEIL remain on the v0.2.7 direction because that direction was accepted.
