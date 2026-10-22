@@ -1,5 +1,24 @@
-# v0.2.6 WEBGL implementation notes
+# DREAM CATALOGUE v0.2.7 — IMPLEMENTATION SPEC
 
-The rendering architecture is intentionally GPU-first. Each mode is a dedicated GLSL fragment shader using the source photo as a texture. Complex appearance comes from layered analytic fields rather than multi-pass CPU compositing.
+Pipeline: source photograph -> tonal/spectral transformation -> mode-specific optical phenomenon -> source-chroma recovery -> film cohesion.
 
-HALO is frozen from v0.2.5. PRISM raises local dispersion and diffraction. SMOKE uses vector RGB transmittance/extinction, neutral scattering, backlight and refraction. VEIL uses multiplicative thin-film interference, transmission, wet arcs, caustics and chromatic slip.
+Performance target: one fragment-shader pass for preview/export, no animation, four-octave procedural fields, bounded blur sampling.
+
+Mode identity:
+- HALO: overexposure, bloom, halation, directional spectral light.
+- PRISM: local chromatic refraction, spectral bands, subtle caustics.
+- VEIL: optical membrane, pearlescent transmission, wet-glass patches, luminous scars.
+- SMOKE: sparse multi-trail smoke, local mist, backlit scattering, subtle refractive heat/air disturbance, rare anomalies.
+
+
+## v0.2.7 PHENOMENA EXPANSION
+- Rebuilt optical color so light is no longer a single flat tint.
+- HALO: spectral ray fan, flare ghosts, arcs and exposure burns.
+- VEIL: iridescent thin-film interference, luminous creases and wet-lens arcs.
+- SMOKE: spectral backlight, beam-through-smoke, chemical filaments and local chromatic refraction.
+- PRISM: multi-zone refraction, diffraction grating, caustics, spectral beams and arcs.
+- Kept the renderer static and GPU-first; FBM remains four octaves.
+
+
+## v0.2.7 architecture
+Each mode now compiles from its own GLSL common/function block and its own fragment main. Changes to PRISM/SMOKE/VEIL helpers cannot change HALO. HALO's engine source is byte-equivalent to v0.2.5 after concatenation. PRISM, SMOKE and VEIL are tuned for stronger visible transformation while keeping a single GPU pass.
