@@ -1,11 +1,11 @@
-# DREAM CATALOGUE v0.2.3.6 IMPLEMENTATION NOTE
+# DREAM CATALOGUE v0.2.4 — IMPLEMENTATION SPEC
 
-Only SMOKE is redesigned in this release. HALO, VEIL and PRISM are intentionally preserved.
+Pipeline: source photograph -> tonal/spectral transformation -> mode-specific optical phenomenon -> source-chroma recovery -> film cohesion.
 
-SMOKE engine goals:
-- local smoke events instead of full-frame white veil
-- multiple soft plume sources
-- lower foreground haze plus faint upper smoke
-- density-based transmission / scattering
-- stronger visibility near highlights and backlight
-- occasional geometric traces retained only as a secondary artifact
+Performance target: one fragment-shader pass for preview/export, no animation, four-octave procedural fields, bounded blur sampling.
+
+Mode identity:
+- HALO: overexposure, bloom, halation, directional spectral light.
+- PRISM: local chromatic refraction, spectral bands, subtle caustics.
+- VEIL: optical membrane, pearlescent transmission, wet-glass patches, luminous scars.
+- SMOKE: sparse multi-trail smoke, local mist, backlit scattering, subtle refractive heat/air disturbance, rare anomalies.
