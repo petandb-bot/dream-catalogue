@@ -3,7 +3,7 @@
 window.DC_SCRIPT_LOADED = true;
 
 const APP = {
-  version: '0.2.4',
+  version: '0.2.5',
   mode: 'HALO',
   params: { light: 70, atmosphere: 82, color: 90, sourceColor: 18 },
   recipe: null,
@@ -43,6 +43,7 @@ uniform vec4 uH1;
 uniform vec4 uH2;
 uniform vec4 uR0;
 uniform vec4 uR1;
+uniform vec4 uR2;
 uniform vec3 uC0;
 uniform vec3 uC1;
 uniform vec3 uC2;
@@ -70,56 +71,45 @@ vec3 sampleBlur9(vec2 uv,vec2 r){vec3 s=texM(uv)*.20;s+=texM(uv+r*vec2(1,0))*.10
 vec3 softShoulder(vec3 c){return c/(vec3(1.0)+max(c-vec3(.72),vec3(0.0))*.90);}
 float grain(vec2 uv){return hash21(floor(uv*uResolution)+uSeed*17.0)-.5;}
 
+vec3 spectralColor(float t){
+  t=fract(t);
+  vec3 rb=.56+.44*cos(6.2831853*(t+vec3(.00,.67,.33)));
+  vec3 p01=mix(uC0,uC1,smoothstep(.00,.48,t));
+  vec3 p23=mix(uC2,uC3,smoothstep(.52,1.00,t));
+  vec3 pal=mix(p01,p23,smoothstep(.28,.72,t));
+  float mixAmt=.24+.34*uColor;
+  return clamp(mix(pal,rb,mixAmt),0.0,1.18);
+}
 vec3 spectrumGrade(vec3 base,float amount){
-  vec3 c=clamp(base,0.0,1.0);
-  float y=lum(c);
-  float sh=1.0-smoothstep(.10,.56,y);
-  float hi=smoothstep(.46,.94,y);
-  float mid=sat(1.0-sh-hi);
-  float w=max(sh+mid+hi,.001);
-  vec3 target=(uC0*sh+uC1*mid+uC2*hi)/w;
-  float ty=max(lum(target),.025);
-  target*=mix(.50,1.28,y)/ty;
-  float a=(uR0.x-.5)*2.55;
-  vec3 rotated=hueRotateYIQ(c,a*amount*(.28+.72*mid));
-  vec3 x=mix(rotated,target,sat((.34+.48*uColor)*amount));
-  vec3 q;
-  q.r=x.r*(.78+.26*uR0.y)+x.g*(.03+.16*uR0.z)+x.b*(.02+.12*uR1.x);
-  q.g=x.g*(.78+.24*uR0.z)+x.b*(.03+.15*uR1.y)+x.r*(.02+.11*uR0.w);
-  q.b=x.b*(.78+.26*uR1.x)+x.r*(.03+.17*uR1.z)+x.g*(.02+.12*uR1.y);
-  float qy=max(lum(q),.002);
-  q*=mix(y,mix(y,qy,.30),.76)/qy;
-  q=satAdjust(q,mix(.78,1.55,uR1.z));
-  return mix(base,clamp(q,0.0,1.30),sat(amount));
+  vec3 c=clamp(base,0.0,1.0);float y=lum(c);
+  float sh=1.0-smoothstep(.10,.54,y);float hi=smoothstep(.48,.95,y);float mid=sat(1.0-sh-hi);
+  vec3 g0=uC0/max(lum(uC0),.08);vec3 g1=uC1/max(lum(uC1),.08);vec3 g2=uC2/max(lum(uC2),.08);
+  vec3 gain=(g0*sh+g1*mid+g2*hi)/max(sh+mid+hi,.001);
+  gain=mix(vec3(1.0),gain,.08+.18*uColor);
+  float aSh=(uR0.x-.5)*1.30;float aMid=(uR0.y-.5)*1.60;float aHi=(uR0.z-.5)*1.20;
+  vec3 q=(hueRotateYIQ(c,aSh)*sh+hueRotateYIQ(c,aMid)*mid+hueRotateYIQ(c,aHi)*hi)/max(sh+mid+hi,.001);
+  q*=gain;
+  float qy=max(lum(q),.002);q*=max(y,.004)/qy;
+  q=satAdjust(q,mix(.88,1.34,uR1.z));
+  return mix(base,clamp(q,0.0,1.28),sat(amount));
 }
 vec3 sourceColorRecovery(vec3 base,vec3 processed){
   float keep=sat(uSourceColor);keep=keep*keep*(3.0-2.0*keep);
   float yp=max(lum(processed),.002),yb=max(lum(base),.018);
-  vec3 src=clamp(base*(yp/yb),0.0,1.30);
-  vec3 pc=processed-vec3(yp);
-  vec3 sc=src-vec3(lum(src));
+  vec3 src=clamp(base*(yp/yb),0.0,1.30);vec3 pc=processed-vec3(yp);vec3 sc=src-vec3(lum(src));
   return clamp(vec3(yp)+mix(pc,sc,keep),0.0,1.30);
 }
-vec3 phenomenonTint(vec3 c,float mask,float amount){
-  float y=max(lum(c),.002);
-  vec3 t=uC3*(y/max(lum(uC3),.02));
-  return mix(c,clamp(t,0.0,1.35),sat(mask*amount*uColor));
-}
-float pseudoDepth(vec2 uv){float e=edge(uv,1.6/uResolution.x);float y=lum(texM(uv));float nearBias=smoothstep(.35,1.0,uv.y);return sat(nearBias*.46+e*.40+(1.0-y)*.14);}
-float beam(vec2 uv,vec2 origin,float angle,float width,float falloff){vec2 q=rot2(uv-origin,-angle);float fwd=smoothstep(-.08,.05,q.x);float w=max(.012,width+max(q.x,0.0)*.11);float cross=exp(-(q.y*q.y)/(w*w));float fade=exp(-max(q.x,0.0)*falloff);return fwd*cross*fade;}
+float beam(vec2 uv,vec2 origin,float angle,float width,float falloff){vec2 q=rot2(uv-origin,-angle);float fwd=smoothstep(-.08,.05,q.x);float w=max(.009,width+max(q.x,0.0)*.085);float cross=exp(-(q.y*q.y)/(w*w));float fade=exp(-max(q.x,0.0)*falloff);return fwd*cross*fade;}
+float lineGlow(vec2 uv,vec2 origin,float angle,float width,float falloff){vec2 q=rot2(uv-origin,-angle);float cross=exp(-(q.y*q.y)/max(width*width,.00005));float fade=exp(-abs(q.x)*falloff);return cross*fade;}
+float arcGlow(vec2 uv,vec2 center,float radius,float width,float phase){vec2 q=uv-center;float d=abs(length(q)-radius);float ring=exp(-(d*d)/max(width*width,.00003));float ang=atan(q.y,q.x);float gate=.30+.70*smoothstep(.08,.92,.5+.5*sin(ang*2.0+phase));return ring*gate;}
 float smokeTrail(vec2 uv,vec2 origin,float width,float height,float wind,float phase){
-  float rise=(origin.y-uv.y)/max(height,.06);
-  float active=smoothstep(-.06,.05,rise)*(1.0-smoothstep(.94,1.25,rise));
+  float rise=(origin.y-uv.y)/max(height,.06);float active=smoothstep(-.06,.05,rise)*(1.0-smoothstep(.94,1.25,rise));
   float drift=(fbm4(vec2(rise*.92,phase*4.1)+12.0)-.5)*width*.78;
   float center=origin.x+wind*rise+sin(rise*5.2+phase*6.2831)*width*.18+drift;
-  float w=width*(.42+max(rise,0.0)*.94)*( .80+.22*sin(rise*7.0+phase*4.0));
-  float xn=(uv.x-center)/max(abs(w),.016);
-  vec2 p=vec2(xn*.60,rise*1.10);
-  float macro=fbm4(p*.86+phase*19.0);
-  float inner=fbm4(p*1.58+phase*31.0);
-  float body=exp(-xn*xn*1.20)*active;
-  float billow=smoothstep(.22,.78,macro*.66+inner*.34);
-  return body*(.34+.66*billow);
+  float w=width*(.42+max(rise,0.0)*.94)*(.80+.22*sin(rise*7.0+phase*4.0));
+  float xn=(uv.x-center)/max(abs(w),.016);vec2 p=vec2(xn*.60,rise*1.10);
+  float macro=fbm4(p*.86+phase*19.0);float inner=fbm4(p*1.58+phase*31.0);
+  float body=exp(-xn*xn*1.20)*active;float billow=smoothstep(.22,.78,macro*.66+inner*.34);return body*(.34+.66*billow);
 }
 `;
 
@@ -127,124 +117,134 @@ float smokeTrail(vec2 uv,vec2 origin,float width,float height,float wind,float p
 const HALO_FRAG = COMMON + `
 void main(){
   vec2 uv=vTexCoord;vec3 base=tex(uv);vec2 px=vec2(1.0)/uResolution;
-  vec3 graded=sourceColorRecovery(base,spectrumGrade(base,.56+.44*uColor));
-  float th=mix(.80,.48,uLight);
-  float b1=ringBright(uv,mix(2.0,5.5,uH0.y),th);
-  float b2=ringBright(uv,mix(8.0,20.0,uH0.z),th-.04);
-  float b3=ringBright(uv,mix(24.0,58.0,uH1.w),th-.09);
-  float e=edge(uv,2.0/uResolution.x);
-  float halo=sat((b1*.72+b2*.96+b3*.88)*(.82+uLight*1.48)+e*uAtmosphere*.30);
-  vec3 blurWide=sampleBlur9(uv,px*mix(8.0,24.0,uH0.x));
-  vec3 outc=mix(graded,blurWide,(.05+.18*uAtmosphere)*smoothstep(.02,.80,halo+b3*.8));
-  vec2 o1=vec2(-.12,mix(.10,.90,uH0.x));
-  vec2 o2=vec2(mix(.12,.88,uH1.x),-.10);
-  vec2 o3=vec2(1.12,mix(.08,.92,uH2.z));
-  float r1=beam(uv,o1,mix(-.30,.32,uH1.z),mix(.025,.090,uH0.w),mix(.45,1.35,uH2.y));
-  float r2=beam(uv,o2,mix(.95,1.65,uH2.x),mix(.018,.070,uH1.y),mix(.42,1.18,uH0.z));
-  float r3=beam(uv,o3,mix(2.78,3.46,uH2.w),mix(.018,.078,uH1.w),mix(.45,1.28,uH0.y));
-  float rayNoise=.70+.30*fbm4(uv*2.0+uSeed*.031);
-  float rays=sat((r1*.88+r2*.72+r3*.62)*rayNoise*uLight*uAtmosphere);
-  vec3 haloCol=mix(uC2,uC3,.44+.36*uR1.y);
-  outc=screenBlend(outc,haloCol*halo*(.24+.96*uLight));
-  outc=screenBlend(outc,uC3*rays*(.18+.68*uColor));
-  float blow=sat((b1*.05+b2*.13+b3*.19)*uLight*(.92+uAtmosphere*.56));
-  outc=mix(outc,vec3(1.0),blow);
-  float leak=smoothstep(.54,.88,fbm4(rot2(uv-.5,(uH1.x-.5)*1.4)*mix(.82,1.48,uH0.z)+uSeed*.013));
-  leak*=uAtmosphere*uColor*(.08+.20*uR0.w);
-  outc=screenBlend(outc,uC3*leak);
-  outc+=vec3(grain(uv)*(.008+.016*uAtmosphere));
-  gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
+  vec3 graded=sourceColorRecovery(base,spectrumGrade(base,.34+.30*uColor));
+  float th=mix(.82,.47,uLight);float b1=bright(uv,th);float b2=ringBright(uv,mix(8.0,24.0,uH0.z),th-.06);float b3=ringBright(uv,mix(26.0,62.0,uH1.w),th-.10);
+  float e=edge(uv,1.8/uResolution.x);float halo=sat(b1*.58+b2*.94+b3*.90+e*.20*uAtmosphere);
+  vec3 blur=sampleBlur9(uv,px*mix(9.0,25.0,uH0.x));vec3 outc=mix(graded,blur,halo*(.06+.20*uAtmosphere));
+
+  float side=step(.5,uR0.x);vec2 src=vec2(mix(-.14,1.14,side),mix(.08,.78,uR0.y));vec2 aim=vec2(.5,.48)-src;float a=atan(aim.y,aim.x);
+  float spread=mix(.08,.34,uR1.x);float rw=mix(.010,.034,uH0.w);
+  float r0=beam(uv,src,a-spread,rw*.72,mix(.34,.84,uR1.y));
+  float r1=beam(uv,src,a-spread*.45,rw,mix(.30,.78,uR1.z));
+  float r2=beam(uv,src,a,rw*1.24,mix(.28,.72,uH1.x));
+  float r3=beam(uv,src,a+spread*.52,rw*.88,mix(.34,.88,uH2.y));
+  float r4=beam(uv,src,a+spread,rw*.62,mix(.40,.96,uH2.w));
+  float noise=.64+.36*fbm4(uv*2.1+vec2(uSeed*.031,9.0));
+  float rayAmt=uLight*uAtmosphere*(.55+.65*uR2.x)*noise;
+  outc=screenBlend(outc,spectralColor(.03+uR0.z)*r0*rayAmt*.46);
+  outc=screenBlend(outc,spectralColor(.23+uR1.y)*r1*rayAmt*.58);
+  outc=screenBlend(outc,spectralColor(.46+uR2.y)*r2*rayAmt*.72);
+  outc=screenBlend(outc,spectralColor(.69+uR0.w)*r3*rayAmt*.54);
+  outc=screenBlend(outc,spectralColor(.88+uR2.z)*r4*rayAmt*.40);
+
+  vec2 axis=vec2(.5)-src;float flareGate=.52+.48*step(.28,uR2.w);
+  float f1=blob(uv,src+axis*.34,vec2(.045,.032)*(1.0+uR1.x),a)*flareGate;
+  float f2=blob(uv,src+axis*.62,vec2(.070,.045)*(1.0+uR0.z),a)*flareGate;
+  float f3=blob(uv,src+axis*1.08,vec2(.11,.055)*(1.0+uH2.z),a)*flareGate;
+  outc=screenBlend(outc,spectralColor(.18+uR2.x)*f1*(.10+.24*uLight));
+  outc=screenBlend(outc,spectralColor(.55+uR1.w)*f2*(.08+.20*uLight));
+  outc=screenBlend(outc,spectralColor(.82+uR0.y)*f3*(.06+.16*uLight));
+
+  float arc=arcGlow(uv,src,mix(.30,.78,uH1.y),mix(.008,.022,uR2.z),uSeed*.11+uR1.x*6.2831);
+  arc*=uAtmosphere*(.10+.30*uLight)*(.45+.55*step(.38,uR2.y));outc=screenBlend(outc,spectralColor(.35+uR2.w)*arc);
+
+  float burn=blob(uv,src,vec2(mix(.28,.56,uH2.x),mix(.20,.48,uH1.z)),a)*(.18+.42*uLight);
+  burn*=smoothstep(.20,.92,fbm4((uv-src)*1.4+uSeed*.013));outc=screenBlend(outc,spectralColor(.70+uR1.z)*burn*.24);
+  float blow=sat((b1*.08+b2*.15+b3*.18)*uLight*(.95+uAtmosphere*.55));outc=mix(outc,vec3(1.0),blow);
+  outc+=vec3(grain(uv)*(.007+.014*uAtmosphere));outc=softShoulder(outc);gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
 }`;
 
 const VEIL_FRAG = COMMON + `
 void main(){
   vec2 uv=vTexCoord;vec3 base=tex(uv);vec2 px=vec2(1.0)/uResolution;
-  vec3 graded=sourceColorRecovery(base,spectrumGrade(base,.50+.42*uColor));
-  vec2 p=rot2(uv-.5,mix(-.72,.72,uH0.x));
-  float f0=fbm4(p*.54+vec2(uSeed*.010,3.7));
-  float f1=fbm4(p*1.04+vec2(17.3,uSeed*.009));
-  float f2=fbm4(p*1.72+vec2(31.9,uSeed*.013));
-  float thickness=smoothstep(.24,.80,f0*.58+f1*.30+f2*.12);
-  float pocket=smoothstep(.56,.84,fbm4(p*1.20+vec2(51.0,uSeed*.011)));
-  thickness*=mix(1.08,.72,pocket);
-  float sheet=pow(sat(.5+.5*sin(p.x*2.2+f0*3.7+uH1.w*6.2831)),3.0);
-  float membrane=sat((thickness*.72+sheet*.28)*(.70+.72*uAtmosphere));
-  vec2 disp=vec2(noise2(p*3.0+vec2(uSeed,4.1))-.5,noise2(p*3.0+vec2(17.0,uSeed))-.5)*px*mix(1.0,6.0,uAtmosphere)*membrane;
-  vec3 refr=texM(uv+disp);vec3 blur=sampleBlur9(uv+disp,px*mix(2.0,8.0,uH2.z));
-  vec3 behind=mix(refr,blur,membrane*(.08+.20*uAtmosphere));
-  float hi=bright(uv,mix(.76,.46,uLight));float ring=ringBright(uv,mix(6.0,22.0,uH1.y),mix(.74,.50,uLight));float e=edge(uv,1.6/uResolution.x);
-  float catchLight=sat(hi*.72+ring*.78+e*.28);
-  float wet1=blob(uv,vec2(mix(.10,.90,uH0.y),mix(.08,.92,uH1.x)),vec2(mix(.20,.46,uH2.x),mix(.16,.38,uH2.y)),mix(-1.0,1.0,uR0.z));
-  float wet2=blob(uv,vec2(mix(.08,.92,uH2.z),mix(.08,.92,uH0.w)),vec2(mix(.16,.38,uH1.y),mix(.18,.42,uH1.w)),mix(-1.2,1.2,uR1.y));
-  float luminousScar=smoothstep(.66,.88,fbm4(rot2(p,(uR0.w-.5)*1.4)*1.86+uSeed*.019));
-  luminousScar*=smoothstep(.14,.82,membrane)*(.22+.78*catchLight);
-  float local=sat(membrane+wet1*.28+wet2*.20);
-  vec3 outc=mix(graded,behind,local*(.08+.18*uAtmosphere));
-  outc=phenomenonTint(outc,local,.38+.34*uAtmosphere);
-  float sheen=local*(.06+.22*uLight)+catchLight*membrane*(.20+.54*uLight);
-  outc=screenBlend(outc,uC3*sheen);
-  outc=screenBlend(outc,mix(uC2,vec3(1.0),.40)*luminousScar*(.10+.30*uLight));
-  float milk=membrane*(.020+.065*uAtmosphere)*(1.0-catchLight*.35);outc=mix(outc,vec3(1.0),milk);
-  float chromaSlip=catchLight*local*uColor*(.025+.07*uR1.z);vec3 slip=vec3(texM(uv+disp*1.6+px*2.0).r,behind.g,texM(uv-disp*1.4-px*2.0).b);outc=mix(outc,slip,chromaSlip);
-  outc+=vec3(grain(uv)*(.003+.007*uAtmosphere));outc=softShoulder(outc);
-  gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
+  vec3 graded=sourceColorRecovery(base,spectrumGrade(base,.28+.28*uColor));
+  vec2 p=rot2(uv-.5,mix(-.90,.90,uH0.x));
+  float n0=fbm4(p*.55+vec2(uSeed*.010,3.7));float n1=fbm4(p*1.12+vec2(17.3,uSeed*.009));float n2=fbm4(p*2.05+vec2(31.9,uSeed*.013));
+  float thickness=smoothstep(.22,.82,n0*.56+n1*.31+n2*.13);float holes=smoothstep(.62,.86,fbm4(p*1.38+vec2(51.0,uSeed*.011)));thickness*=1.0-holes*.42;
+  float fold1=pow(sat(.5+.5*sin(p.x*3.0+n0*4.2+uR0.x*6.2831)),5.0);
+  float fold2=pow(sat(.5+.5*sin((p.x*.58+p.y)*4.2-n1*3.0+uR1.y*6.2831)),7.0);
+  float membrane=sat((thickness*.66+fold1*.22+fold2*.16)*(.66+.78*uAtmosphere));
+  vec2 disp=vec2(noise2(p*3.2+vec2(uSeed,4.1))-.5,noise2(p*3.0+vec2(17.0,uSeed))-.5)*px*mix(1.0,8.5,uAtmosphere)*membrane;
+  vec3 refr=texM(uv+disp);vec3 blur=sampleBlur9(uv+disp,px*mix(2.0,9.0,uH2.z));vec3 behind=mix(refr,blur,membrane*(.08+.20*uAtmosphere));
+
+  float interference=fract(thickness*2.8+n1*.92+fold1*.36+uR2.x);vec3 filmCol=spectralColor(interference);
+  float sheen=membrane*(.05+.18*uLight)+fold1*membrane*(.12+.28*uLight)+fold2*membrane*(.08+.20*uLight);
+  vec3 outc=mix(graded,behind,membrane*(.08+.18*uAtmosphere));outc=softLight(outc,mix(outc,filmCol,.34*sheen));
+  outc=screenBlend(outc,filmCol*sheen*(.16+.28*uColor));
+
+  float crease=pow(ridge(.5+.5*sin((p.y+n0*.42)*mix(8.0,17.0,uR1.x)+uSeed*.18)),9.0)*membrane;
+  crease*=.35+.65*smoothstep(.28,.80,n2);outc=screenBlend(outc,spectralColor(.16+n1+uR2.y)*crease*(.08+.26*uLight));
+
+  vec2 wetC=vec2(mix(.12,.88,uR0.w),mix(.16,.84,uR1.w));
+  float wetArc=arcGlow(uv,wetC,mix(.18,.62,uH1.y),mix(.006,.020,uR2.z),uSeed*.13);
+  wetArc*=membrane*(.20+.44*uAtmosphere);outc=screenBlend(outc,spectralColor(.56+uR2.w)*wetArc*(.10+.26*uLight));
+
+  float hi=bright(uv,mix(.78,.48,uLight));float chromaMask=sat((fold1*.46+fold2*.36+wetArc*.50)*membrane*uColor*(.12+.20*uR1.z));
+  vec3 slip=vec3(texM(uv+disp*1.8+px*mix(2.0,6.0,uR0.z)).r,behind.g,texM(uv-disp*1.5-px*mix(2.0,6.0,uR0.z)).b);outc=mix(outc,slip,chromaMask*(.24+.32*hi));
+  float milk=membrane*(.015+.050*uAtmosphere)*(1.0-hi*.36);outc=mix(outc,vec3(1.0),milk);
+  outc+=vec3(grain(uv)*(.003+.007*uAtmosphere));outc=softShoulder(outc);gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
 }`;
 
 const SMOKE_FRAG = COMMON + `
 void main(){
   vec2 uv=vTexCoord;vec3 base=tex(uv);vec2 px=vec2(1.0)/uResolution;
-  vec3 graded=sourceColorRecovery(base,spectrumGrade(base,.52+.44*uColor));
-  vec2 o1=vec2(mix(.05,.28,uH0.y),mix(.86,1.07,uH0.z));
-  vec2 o2=vec2(mix(.30,.58,uH1.x),mix(.84,1.06,uH1.y));
-  vec2 o3=vec2(mix(.58,.92,uH2.x),mix(.86,1.09,uH2.y));
-  vec2 o4=vec2(mix(.12,.88,uR0.z),mix(.88,1.10,uR1.x));
-  float t1=smokeTrail(uv,o1,mix(.14,.28,uH0.x),mix(.76,1.12,uH1.w),mix(-.22,.20,uH1.z),uH0.w);
-  float t2=smokeTrail(uv,o2,mix(.12,.25,uH2.z),mix(.72,1.06,uH2.w),mix(-.18,.20,uH0.w),uH1.y+.31);
-  float t3=smokeTrail(uv,o3,mix(.11,.23,uH1.x),mix(.68,1.02,uH0.z),mix(-.18,.18,uH2.x),uH2.z+.63);
-  float t4=smokeTrail(uv,o4,mix(.08,.18,uR0.y),mix(.58,.90,uR1.z),mix(-.14,.14,uR0.x),uR1.y+.17);
-  float macro=fbm4(uv*.62+vec2(uSeed*.010,7.4));float inner=fbm4(uv*1.74+vec2(uSeed*.018,31.7));
-  float core=t1*1.00+t2*.88+t3*.78+t4*.50;core*=.82+.34*macro;
-  float gap=smoothstep(.62,.86,fbm4(rot2(uv-.5,(uR0.w-.5)*1.0)*1.18+vec2(44.0,uSeed*.012)));core*=1.0-gap*.30;
-  float lowMist=blob(uv,vec2(mix(.16,.84,uR1.x),mix(.78,.98,uR1.y)),vec2(mix(.24,.54,uR0.z),mix(.08,.18,uR1.z)),mix(-.30,.30,uR0.y));
-  lowMist*=smoothstep(.26,.78,fbm4(vec2(uv.x*.80-uSeed*.010,uv.y*1.40+21.0)))*(.10+.22*uAtmosphere);
-  float density=smoothstep(.045,.78,core+lowMist*.32)*(.72+.88*uAtmosphere);density=sat(density*(.90+.16*inner));
-  vec2 refr=vec2(noise2(uv*4.2+vec2(uSeed,4.1))-.5,noise2(uv*4.0+vec2(13.1,uSeed))-.5)*px*mix(1.0,5.0,uAtmosphere)*(density+lowMist*.3);
-  vec3 warped=texM(uv+refr);vec3 blur=sampleBlur9(uv+refr,px*mix(3.0,10.0,uH1.w));vec3 behind=mix(warped,blur,density*(.12+.24*uAtmosphere));
-  float hi=bright(uv,mix(.74,.48,uLight));float ring=ringBright(uv,mix(7.0,22.0,uH1.y),mix(.72,.50,uLight));float e=edge(uv,1.4/uResolution.x);
-  float backlit=sat((hi*.62+ring*.58+e*.12)*density)*(.25+.82*uLight);
-  float optical=density*(.62+1.00*uAtmosphere)+lowMist*(.10+.28*uAtmosphere);float trans=exp(-optical);
-  vec3 smokeCol=mix(uC3,mix(uC1,vec3(.95),.55),.38+.38*uR0.y);
-  vec3 smoky=behind*trans+smokeCol*(1.0-trans)*(.48+.28*uColor);
-  smoky=screenBlend(smoky,mix(smokeCol,vec3(1.0),.52)*backlit*(.16+.36*uLight));
-  float wisp=smoothstep(.50,.84,inner)*density*(1.0-trans);smoky=screenBlend(smoky,mix(uC2,vec3(1.0),.48)*wisp*(.06+.16*uLight));
-  float anomalyGate=1.0-step(.26,uR1.w);float shard=pow(smoothstep(.72,.90,fbm4(uv*3.2+vec2(uSeed*.021,61.0))),1.7)*density*anomalyGate;smoky=mix(smoky,softLight(smoky,mix(uC3,vec3(1.0),.44)),shard*.12);
-  vec3 outc=mix(graded,smoky,sat(density*(.68+.38*uAtmosphere)+lowMist*.18));outc=phenomenonTint(outc,density,.18+.22*uAtmosphere);
-  outc+=vec3(grain(uv)*(.003+.007*uAtmosphere));outc=softShoulder(outc);
-  gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
+  vec3 graded=sourceColorRecovery(base,spectrumGrade(base,.30+.30*uColor));
+  vec2 o1=vec2(mix(.02,.28,uH0.y),mix(.86,1.08,uH0.z));vec2 o2=vec2(mix(.26,.56,uH1.x),mix(.84,1.06,uH1.y));vec2 o3=vec2(mix(.56,.94,uH2.x),mix(.86,1.10,uH2.y));vec2 o4=vec2(mix(.08,.92,uR0.z),mix(.88,1.10,uR1.x));
+  float t1=smokeTrail(uv,o1,mix(.12,.27,uH0.x),mix(.78,1.16,uH1.w),mix(-.24,.20,uH1.z),uH0.w);
+  float t2=smokeTrail(uv,o2,mix(.11,.24,uH2.z),mix(.72,1.08,uH2.w),mix(-.20,.22,uH0.w),uH1.y+.31);
+  float t3=smokeTrail(uv,o3,mix(.10,.22,uH1.x),mix(.68,1.03,uH0.z),mix(-.18,.20,uH2.x),uH2.z+.63);
+  float t4=smokeTrail(uv,o4,mix(.07,.17,uR0.y),mix(.58,.92,uR1.z),mix(-.14,.14,uR0.x),uR1.y+.17);
+  float macro=fbm4(uv*.66+vec2(uSeed*.010,7.4));float inner=fbm4(uv*1.84+vec2(uSeed*.018,31.7));float curl=fbm4(rot2(uv-.5,(uR2.x-.5)*1.2)*vec2(1.0,1.55)+vec2(22.0,uSeed*.014));
+  float core=(t1*1.04+t2*.92+t3*.80+t4*.52)*(.80+.36*macro);float pocket=smoothstep(.64,.88,fbm4(uv*1.22+vec2(44.0,uSeed*.012)));core*=1.0-pocket*.36;
+  float floorFog=blob(uv,vec2(mix(.18,.82,uR1.x),mix(.82,.98,uR1.y)),vec2(mix(.26,.58,uR0.z),mix(.07,.16,uR1.z)),mix(-.30,.30,uR0.y));floorFog*=smoothstep(.26,.80,curl)*(.08+.18*uAtmosphere);
+  float density=sat(smoothstep(.05,.80,core+floorFog*.28)*(.68+.90*uAtmosphere));density*=.88+.18*inner;
+
+  vec2 refr=vec2(noise2(uv*4.4+vec2(uSeed,4.1))-.5,noise2(uv*4.0+vec2(13.1,uSeed))-.5)*px*mix(1.0,6.0,uAtmosphere)*(density+floorFog*.3);
+  vec3 warped=texM(uv+refr);vec3 blur=sampleBlur9(uv+refr,px*mix(3.0,10.0,uH1.w));vec3 behind=mix(warped,blur,density*(.10+.22*uAtmosphere));
+  float hi=bright(uv,mix(.76,.47,uLight));float e=edge(uv,1.4/uResolution.x);float backlit=sat((hi*.68+e*.14)*density)*(.28+.88*uLight);
+  vec3 smokeNeutral=mix(vec3(.76,.80,.84),vec3(.90,.91,.88),uR0.y);vec3 smokeColor=mix(smokeNeutral,spectralColor(.18+inner*.58+uR2.y),(.10+.30*uColor)*density);
+  float optical=density*(.60+.98*uAtmosphere)+floorFog*(.10+.24*uAtmosphere);float trans=exp(-optical);
+  vec3 smoky=behind*trans+smokeColor*(1.0-trans)*(.46+.24*uColor);
+  smoky=screenBlend(smoky,spectralColor(.64+curl*.36+uR0.w)*backlit*(.14+.34*uLight));
+
+  float filament=pow(ridge(inner),6.0)*density*smoothstep(.28,.86,curl);smoky=screenBlend(smoky,spectralColor(.30+inner+uR1.w)*filament*(.08+.22*uLight));
+  float side=step(.5,uR2.z);vec2 src=vec2(mix(-.10,1.10,side),mix(.14,.72,uR2.w));vec2 aim=vec2(.50,.48)-src;float a=atan(aim.y,aim.x);float spread=mix(.08,.24,uR1.x);
+  float br0=beam(uv,src,a-spread,mix(.012,.028,uH0.w),mix(.34,.78,uR0.x));float br1=beam(uv,src,a,mix(.016,.036,uH1.y),mix(.30,.72,uR1.y));float br2=beam(uv,src,a+spread,mix(.010,.025,uH2.w),mix(.38,.84,uR1.z));
+  float smokeGate=sat(density*.80+floorFog*.38);float rayGate=uLight*uAtmosphere*smokeGate*(.30+.58*uR2.x);
+  smoky=screenBlend(smoky,spectralColor(.08+uR0.x)*br0*rayGate*.34);smoky=screenBlend(smoky,spectralColor(.48+uR1.x)*br1*rayGate*.46);smoky=screenBlend(smoky,spectralColor(.82+uR2.y)*br2*rayGate*.30);
+
+  float split=density*uColor*(.035+.080*uR2.w);vec3 chroma=vec3(texM(uv+refr*2.1+px*2.0).r,smoky.g,texM(uv-refr*1.8-px*2.0).b);smoky=mix(smoky,chroma,split);
+  float anomaly=pow(smoothstep(.72,.91,fbm4(uv*3.1+vec2(uSeed*.021,61.0))),1.8)*density*step(.72,uR1.w);smoky=screenBlend(smoky,spectralColor(.55+uR2.z)*anomaly*.12);
+  vec3 outc=mix(graded,smoky,sat(density*(.66+.38*uAtmosphere)+floorFog*.16));outc+=vec3(grain(uv)*(.003+.007*uAtmosphere));outc=softShoulder(outc);gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
 }`;
 
 const PRISM_FRAG = COMMON + `
 void main(){
   vec2 uv=vTexCoord;vec3 base=tex(uv);vec2 px=vec2(1.0)/uResolution;
-  vec3 scene=sourceColorRecovery(base,spectrumGrade(base,.44+.38*uColor));
-  vec2 dir=normalize(vec2(cos(uH0.x*6.2831),sin(uH0.x*6.2831)));
-  float spread=mix(3.0,25.0,uLight)*mix(.72,1.42,uH0.y);vec2 off=dir*px*spread;
-  vec3 chroma=vec3(texM(uv+off*1.2).r,texM(uv).g,texM(uv-off*1.2).b);
-  float field=fbm4(uv*mix(.82,2.05,uH0.z)+uSeed*.010);
-  float phase=dot(uv,dir)*mix(4.2,11.0,uH1.x)+field*2.8;
-  float band=pow(.5+.5*sin(phase),mix(4.0,9.0,uH1.y));
-  float hi=bright(uv,mix(.72,.49,uLight));float e=edge(uv,1.6/uResolution.x);
-  float local=sat(.10+hi*.66+e*.48+band*uAtmosphere*.22);
-  vec3 outc=mix(scene,chroma,(.08+.28*uColor)*local);
-  float leak=sat(band*uAtmosphere*(.38+.62*local));
-  outc=screenBlend(outc,uC3*leak*(.26+.54*uColor));
-  float caustic=pow(sat(ridge(fbm4(rot2(uv-.5,(uR0.y-.5)*1.6)*2.2+uSeed*.017)*1.42)),5.0);
-  caustic*=hi*uAtmosphere*(.08+.20*uR1.x);
-  outc=screenBlend(outc,mix(uC2,uC3,.5)*caustic);
-  float bloom=ringBright(uv,mix(8.0,24.0,uH1.w),mix(.66,.52,uLight))*uLight;
-  outc=screenBlend(outc,mix(vec3(.96),uC3,.28)*bloom*(.40+.18*uAtmosphere));
-  outc+=vec3(grain(uv)*.006);outc=softShoulder(outc);
-  gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
+  vec3 scene=sourceColorRecovery(base,spectrumGrade(base,.24+.25*uColor));
+  float ang=uH0.x*6.2831;vec2 dir=vec2(cos(ang),sin(ang));vec2 perp=vec2(-dir.y,dir.x);float spread=mix(5.0,34.0,uLight)*mix(.72,1.38,uH0.y);
+
+  vec2 c1=vec2(mix(.10,.90,uR0.x),mix(.10,.90,uR0.y));vec2 c2=vec2(mix(.10,.90,uR1.x),mix(.10,.90,uR1.y));
+  float z1=blob(uv,c1,vec2(mix(.18,.42,uH0.z),mix(.10,.28,uR0.z)),ang);
+  float z2=blob(uv,c2,vec2(mix(.14,.34,uH1.x),mix(.12,.32,uR1.z)),-ang*.7);
+  float band=pow(sat(.5+.5*sin(dot(uv,dir)*mix(11.0,28.0,uH1.y)+fbm4(uv*1.5+uSeed*.012)*4.0)),6.0);
+  float mask=sat(z1*.76+z2*.62+band*.32*uAtmosphere);
+
+  vec2 d=dir*px*spread*(.25+.75*mask);vec2 d2=perp*px*spread*(.18+.62*z2);
+  vec3 refr=vec3(texM(uv+d*1.35+d2*.25).r,texM(uv-d2*.30).g,texM(uv-d*1.18-d2*.20).b);
+  vec3 ghost=texM(uv+d2*1.45+d*.28);
+  float e=edge(uv,1.5/uResolution.x);float hi=bright(uv,mix(.74,.48,uLight));float local=sat(mask*(.48+.52*uAtmosphere)+e*.34+hi*.42);
+  vec3 outc=mix(scene,refr,local*(.18+.42*uColor));outc=mix(outc,ghost,z2*(.04+.13*uAtmosphere));
+
+  float diffraction=pow(ridge(.5+.5*sin(dot(uv,perp)*mix(18.0,44.0,uR2.x)+fbm4(uv*2.0+17.0)*5.0)),7.0);diffraction*=local*uAtmosphere;
+  outc=screenBlend(outc,spectralColor(dot(uv,dir)*2.2+uR2.y)*diffraction*(.16+.38*uColor));
+  float caustic=pow(ridge(fbm4(rot2(uv-.5,(uR0.w-.5)*1.8)*2.5+uSeed*.017)),6.0);caustic*=sat(hi*.72+z1*.28)*uAtmosphere;
+  outc=screenBlend(outc,spectralColor(.42+fbm4(uv*1.3+uSeed*.02))*caustic*(.08+.24*uLight));
+
+  float side=step(.5,uR2.z);vec2 src=vec2(mix(-.10,1.10,side),mix(.08,.84,uR2.w));vec2 aim=vec2(.5)-src;float a=atan(aim.y,aim.x);float ray=beam(uv,src,a,mix(.008,.026,uH2.x),mix(.34,.84,uH2.y));float ray2=beam(uv,src,a+mix(-.18,.18,uR1.w),mix(.006,.020,uH2.z),mix(.42,.96,uH1.w));
+  outc=screenBlend(outc,spectralColor(.12+uR0.x)*ray*uLight*uAtmosphere*.26);outc=screenBlend(outc,spectralColor(.70+uR1.z)*ray2*uLight*uAtmosphere*.22);
+  float arc=arcGlow(uv,c1,mix(.18,.56,uH2.w),mix(.006,.018,uR2.x),uSeed*.14);outc=screenBlend(outc,spectralColor(.52+uR0.y)*arc*local*(.08+.20*uLight));
+  outc+=vec3(grain(uv)*.006);outc=softShoulder(outc);gl_FragColor=vec4(clamp(outc,0.0,1.0),1.0);
 }`;
 
 const SPECTRA = [
@@ -406,11 +406,11 @@ function makeRecipe(mode){
   if(mode==='PRISM') pool=[0,1,2,3,5,7,8,9];
   const s=SPECTRA[pool[Math.floor(rnd()*pool.length)]];
   let h0,h1,h2,count;
-  if(mode==='HALO'){h0=[r(.08,.94),r(.08,.94),r(.08,.92),rnd()];h1=[rnd(),rnd(),rnd(),rnd()];h2=[rnd(),rnd(),rnd(),rnd()];count=16;}
-  else if(mode==='VEIL'){h0=[rnd(),r(.12,.98),r(.18,.98),rnd()];h1=[rnd(),rnd(),rnd(),rnd()];h2=[rnd(),rnd(),rnd(),rnd()];count=24;}
+  if(mode==='HALO'){h0=[r(.08,.94),r(.08,.94),r(.08,.92),rnd()];h1=[rnd(),rnd(),rnd(),rnd()];h2=[rnd(),rnd(),rnd(),rnd()];count=34;}
+  else if(mode==='VEIL'){h0=[rnd(),r(.12,.98),r(.18,.98),rnd()];h1=[rnd(),rnd(),rnd(),rnd()];h2=[rnd(),rnd(),rnd(),rnd()];count=32;}
   else if(mode==='SMOKE'){h0=[r(.14,.92),r(.06,.94),r(.18,.98),rnd()];h1=[r(.12,.94),r(.16,.98),rnd(),r(.18,.96)];h2=[r(.10,.94),r(.10,.94),rnd(),r(.14,.96)];count=28;}
-  else{h0=[rnd(),r(.30,1.0),rnd(),rnd()];h1=[r(.30,1.0),rnd(),rnd(),rnd()];h2=[rnd(),rnd(),rnd(),rnd()];count=16;}
-  return {seed,h0,h1,h2,r0:[rnd(),rnd(),rnd(),rnd()],r1:[rnd(),rnd(),rnd(),rnd()],c0:s.c0,c1:s.c1,c2:s.c2,c3:s.c3,spectrum:s.name,id:Math.floor(rnd()*count)+1};
+  else{h0=[rnd(),r(.30,1.0),rnd(),rnd()];h1=[r(.30,1.0),rnd(),rnd(),rnd()];h2=[rnd(),rnd(),rnd(),rnd()];count=32;}
+  return {seed,h0,h1,h2,r0:[rnd(),rnd(),rnd(),rnd()],r1:[rnd(),rnd(),rnd(),rnd()],r2:[rnd(),rnd(),rnd(),rnd()],c0:s.c0,c1:s.c1,c2:s.c2,c3:s.c3,spectrum:s.name,id:Math.floor(rnd()*count)+1};
 }
 
 function updateVariation(){if(ui.variationMeta) ui.variationMeta.textContent='CATALOGUE / '+APP.mode+' / '+String(APP.recipe?.id||1).padStart(2,'0')+' / '+(APP.recipe?.spectrum||'—');}
@@ -420,7 +420,7 @@ function setUniforms(sh,w,h){
   sh.setUniform('uTex',APP.source);sh.setUniform('uResolution',[w,h]);
   sh.setUniform('uLight',APP.params.light/100);sh.setUniform('uAtmosphere',APP.params.atmosphere/100);sh.setUniform('uColor',APP.params.color/100);sh.setUniform('uSourceColor',APP.params.sourceColor/100);
   sh.setUniform('uSeed',APP.recipe.seed);sh.setUniform('uH0',APP.recipe.h0);sh.setUniform('uH1',APP.recipe.h1);sh.setUniform('uH2',APP.recipe.h2);
-  sh.setUniform('uR0',APP.recipe.r0);sh.setUniform('uR1',APP.recipe.r1);sh.setUniform('uC0',APP.recipe.c0);sh.setUniform('uC1',APP.recipe.c1);sh.setUniform('uC2',APP.recipe.c2);sh.setUniform('uC3',APP.recipe.c3);
+  sh.setUniform('uR0',APP.recipe.r0);sh.setUniform('uR1',APP.recipe.r1);sh.setUniform('uR2',APP.recipe.r2);sh.setUniform('uC0',APP.recipe.c0);sh.setUniform('uC1',APP.recipe.c1);sh.setUniform('uC2',APP.recipe.c2);sh.setUniform('uC3',APP.recipe.c3);
 }
 
 function renderPreview(){

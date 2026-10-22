@@ -1,4 +1,4 @@
-# DREAM CATALOGUE v0.2.4
+# DREAM CATALOGUE v0.2.5
 
 Optical Phenomena Engine rebuild.
 
@@ -17,3 +17,12 @@ This version keeps the existing interface while rebuilding the image engine arou
 ## Files
 
 FULL/GitHub builds include the PWA manifest, service worker and icons. The p5 Web Editor build excludes PWA registration files.
+
+
+## v0.2.5 PHENOMENA EXPANSION
+- Rebuilt optical color so light is no longer a single flat tint.
+- HALO: spectral ray fan, flare ghosts, arcs and exposure burns.
+- VEIL: iridescent thin-film interference, luminous creases and wet-lens arcs.
+- SMOKE: spectral backlight, beam-through-smoke, chemical filaments and local chromatic refraction.
+- PRISM: multi-zone refraction, diffraction grating, caustics, spectral beams and arcs.
+- Kept the renderer static and GPU-first; FBM remains four octaves.
