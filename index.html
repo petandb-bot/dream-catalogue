@@ -1,97 +1,45 @@
 <!doctype html>
-<html lang="en" data-mode="halo">
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#eef0f3">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Dream Catalogue">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="description" content="Dream Catalogue — photographic atmosphere processor">
-  <title>Dream Catalogue</title>
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="apple-touch-icon" href="./icons/icon-180.png">
-  <link rel="stylesheet" href="./style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>Dream Catalogue v0.2.8.1</title>
+  <meta name="theme-color" content="#e6e3ea" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Dream Catalogue" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.13/lib/p5.min.js"></script>
 </head>
 <body>
-  <div class="ambient-page" aria-hidden="true"><i></i><i></i><i></i></div>
-
-  <main class="app-shell">
-    <header class="masthead">
-      <div class="wordmark" aria-label="Dream Catalogue">
-        <span class="dream-word">DREAM</span>
-        <span class="catalogue-word">CATALOGUE</span>
+  <div class="app">
+    <header class="topbar">
+      <div class="titleblock"><h1>Dream Catalogue</h1><p>optical phenomena for photographs</p></div>
+      <div class="top-actions">
+        <button id="openBtn" class="btn">OPEN</button>
+        <button id="mutateBtn" class="btn strong">MUTATE</button>
+        <button id="saveBtn" class="btn">SAVE</button>
       </div>
-      <span class="version">0.2.8</span>
-      <button id="openPhotoTop" class="open-top" type="button">OPEN</button>
     </header>
-
-    <section class="image-world" id="stage" aria-label="image stage">
-      <div id="canvasMount" class="canvas-mount"></div>
-      <div id="emptyState" class="empty-state">
-        <div class="spectral-field" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-        <button id="openPhotoPrimary" class="open-primary" type="button">OPEN</button>
-      </div>
-      <div id="renderOverlay" class="render-overlay" hidden><span class="activity-indicator"></span><span id="renderLabel">REVEALING</span></div>
-    </section>
-
-    <section class="control-sheet" aria-label="Dream Catalogue controls">
-      <nav class="modes" role="group" aria-label="mode">
-        <button class="mode active" data-mode="HALO" type="button" aria-pressed="true"><span>HALO</span></button>
-        <button class="mode" data-mode="VEIL" type="button" aria-pressed="false"><span>VEIL</span></button>
-        <button class="mode" data-mode="SMOKE" type="button" aria-pressed="false"><span>SMOKE</span></button>
-        <button class="mode" data-mode="PRISM" type="button" aria-pressed="false"><span>PRISM</span></button>
-      </nav>
-
-      <button id="revealButton" class="reveal-button" type="button"><span>REVEAL</span></button>
-
-      <div class="utility-row">
-        <button id="backButton" class="utility" type="button" disabled>BACK</button>
-        <button id="editToggle" class="utility" type="button" aria-expanded="false" aria-controls="editPanel">EDIT <span id="editChevron">＋</span></button>
-        <button id="saveButton" class="utility" type="button" disabled>SAVE</button>
-      </div>
-
-      <section id="editPanel" class="edit-panel" hidden>
-        <div class="parameter">
-          <div class="parameter-head"><label for="lightSlider">LIGHT</label><output id="lightValue" for="lightSlider">70</output></div>
-          <input id="lightSlider" type="range" min="0" max="100" value="70" step="1">
-        </div>
-        <div class="parameter">
-          <div class="parameter-head"><label for="atmosphereSlider">ATMOSPHERE</label><output id="atmosphereValue" for="atmosphereSlider">82</output></div>
-          <input id="atmosphereSlider" type="range" min="0" max="100" value="82" step="1">
-        </div>
-        <div class="parameter">
-          <div class="parameter-head"><label for="colorSlider">COLOR</label><output id="colorValue" for="colorSlider">90</output></div>
-          <input id="colorSlider" type="range" min="0" max="100" value="90" step="1">
-        </div>
-        <div class="parameter">
-          <div class="parameter-head"><label for="sourceColorSlider">SOURCE COLOR</label><output id="sourceColorValue" for="sourceColorSlider">18</output></div>
-          <input id="sourceColorSlider" type="range" min="0" max="100" value="18" step="1">
-        </div>
-        <div class="export-row">
-          <label for="exportSize">SIZE</label>
-          <select id="exportSize">
-            <option value="1800">1800</option>
-            <option value="2600" selected>2600</option>
-            <option value="3200">3200</option>
-          </select>
+    <main class="main">
+      <section class="canvas-panel"><div id="canvasWrap" class="canvas-wrap"></div><input id="photoInput" type="file" accept="image/*" hidden /></section>
+      <section class="control-panel">
+        <nav class="mode-nav" id="modeNav">
+          <button class="mode-btn active" data-mode="HALO">HALO</button>
+          <button class="mode-btn" data-mode="PRISM">PRISM</button>
+          <button class="mode-btn" data-mode="SMOKE">SMOKE</button>
+          <button class="mode-btn" data-mode="VEIL">VEIL</button>
+        </nav>
+        <div class="sliders">
+          <label class="slider-row"><span>INTENSITY</span><input id="intensitySlider" type="range" min="0" max="100" value="68" /><strong id="intensityValue">68</strong></label>
+          <label class="slider-row"><span>SOURCE COLOR</span><input id="sourceSlider" type="range" min="0" max="100" value="40" /><strong id="sourceValue">40</strong></label>
         </div>
       </section>
-    </section>
-
-    <div class="engine-hooks" aria-hidden="true">
-      <span id="statusText">READY / ADD A PHOTO</span>
-      <span id="variationMeta">CATALOGUE / —</span>
-    </div>
-    <div id="errorPanel" class="error-panel" role="alert" hidden><strong>IMAGE ERROR</strong><span id="errorDetail"></span></div>
-  </main>
-
-  <input id="photoInput" type="file" accept="image/*" hidden>
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.13/lib/p5.min.js"></script>
-  <script src="./sketch.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).catch(console.warn));
-  </script>
+    </main>
+  </div>
+  <script src="sketch.js"></script>
+  <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js').catch(()=>{});});}</script>
 </body>
 </html>

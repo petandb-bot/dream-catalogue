@@ -1,15 +1,1 @@
-{
-  "name": "Dream Catalogue",
-  "short_name": "Dream Catalogue",
-  "description": "Photographic atmosphere processor",
-  "start_url": "./",
-  "scope": "./",
-  "display": "standalone",
-  "orientation": "any",
-  "background_color": "#eef0f3",
-  "theme_color": "#eef0f3",
-  "icons": [
-    {"src":"./icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
-    {"src":"./icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
-  ]
-}
+{"name":"Dream Catalogue","short_name":"DreamCat","start_url":"./index.html","display":"standalone","background_color":"#e7e4ea","theme_color":"#e7e4ea","icons":[{"src":"icons/icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icons/icon-512.png","sizes":"512x512","type":"image/png"}]}
