@@ -1,28 +1,17 @@
-# DREAM CATALOGUE v0.2.5
+# DREAM CATALOGUE v0.2.6 WEBGL
 
-Optical Phenomena Engine rebuild.
+GPU-first optical phenomena build.
 
-This version keeps the existing interface while rebuilding the image engine around four dedicated photographic phenomena: HALO, VEIL, SMOKE, and PRISM.
+## Mode direction
+- HALO: fixed to v0.2.5 behavior.
+- PRISM: stronger multi-zone spectral refraction, diffraction, caustics, rays and sheared image regions.
+- SMOKE: neutral volumetric scattering and RGB extinction instead of a flat Screen-color overlay; color occurs inside illuminated smoke and local refraction.
+- VEIL: stronger refractive membrane, thin-film interference, folds, wet arcs and caustics; no broad single-color light layer.
 
-## Engine changes
+## Performance
+- p5.js WEBGL renderer.
+- One fragment-shader pass per preview/export.
+- Static rendering only; no animation loop or particle simulation.
+- Four-octave FBM and bounded texture sampling.
 
-- New hidden film-spectrum recipes selected by REVEAL.
-- SOURCE COLOR restores original chroma without cancelling optical phenomena.
-- HALO preserves the strong overexposed / halation direction.
-- PRISM preserves the usable spectral/refraction direction with a subtle caustic layer.
-- VEIL is rebuilt as a translucent optical membrane with wet-glass zones and luminous scars.
-- SMOKE is rebuilt around separate drifting trails, local density, backlight response, small refraction, and rare geometric anomalies.
-- Static GPU processing only: no animation loop, no particle simulation, four-octave noise for lower cost.
-
-## Files
-
-FULL/GitHub builds include the PWA manifest, service worker and icons. The p5 Web Editor build excludes PWA registration files.
-
-
-## v0.2.5 PHENOMENA EXPANSION
-- Rebuilt optical color so light is no longer a single flat tint.
-- HALO: spectral ray fan, flare ghosts, arcs and exposure burns.
-- VEIL: iridescent thin-film interference, luminous creases and wet-lens arcs.
-- SMOKE: spectral backlight, beam-through-smoke, chemical filaments and local chromatic refraction.
-- PRISM: multi-zone refraction, diffraction grating, caustics, spectral beams and arcs.
-- Kept the renderer static and GPU-first; FBM remains four octaves.
+FULL/GitHub builds include PWA files and icons. p5 Web Editor build excludes Service Worker and manifest registration.
